@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file alias="play.svg">icons/play.svg</file>
+        <file alias="pause.svg">icons/pause.svg</file>
+        <file alias="prev.svg">icons/prev.svg</file>
+        <file alias="next.svg">icons/next.svg</file>
+        <file alias="shuffle.svg">icons/shuffle.svg</file>
+        <file alias="repeat-all.svg">icons/repeat-all.svg</file>
+        <file alias="repeat-one.svg">icons/repeat-one.svg</file>
+        <file alias="playlist.svg">icons/playlist.svg</file>
+        <file alias="volume.svg">icons/volume.svg</file>
+    </qresource>
+</RCC>

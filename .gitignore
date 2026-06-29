@@ -1,0 +1,32 @@
+# 構建產物
+build/
+build-*/
+cmake-build-*/
+dist/
+
+# 安裝包輸出
+installer/output/
+
+# Qt / CMake 生成
+*.user
+*.autosave
+CMakeCache.txt
+CMakeFiles/
+Makefile
+*.obj
+*.o
+*.exe
+*.dll
+*.a
+*.lib
+*.manifest
+
+# IDE
+.qtcreator/
+.vs/
+.vscode/
+.idea/
+
+# 系統
+.DS_Store
+Thumbs.db
