@@ -6,15 +6,24 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 QuickEffects Multimedia Test)
+find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 QuickEffects Multimedia)
+if(NOT ANDROID)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+endif()
 
 qt_standard_project_setup()
+
+if(ANDROID)
+    set(ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
+endif()
 
 # singleton 必须在 CMake 中显式注册，否则 Theme.xxx / Icons.xxx 运行时会失效
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(qml/Icons.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
-enable_testing()
+if(NOT ANDROID)
+    enable_testing()
+endif()
 
 qt_add_executable(MusicQuick
     src/main.cpp
@@ -59,8 +68,11 @@ target_link_libraries(MusicQuick PRIVATE
     Qt6::Multimedia
 )
 
-set_target_properties(MusicQuick PROPERTIES WIN32_EXECUTABLE TRUE)
+if(WIN32 AND NOT ANDROID)
+    set_target_properties(MusicQuick PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
 
+if(NOT ANDROID)
 qt_add_executable(MusicQuickTests
     tests/test_core.cpp
     src/core/AudioPlayer.cpp
@@ -76,3 +88,4 @@ target_include_directories(MusicQuickTests PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(MusicQuickTests PRIVATE Qt6::Test Qt6::Multimedia)
 
 add_test(NAME musicquick_core COMMAND MusicQuickTests)
+endif()
