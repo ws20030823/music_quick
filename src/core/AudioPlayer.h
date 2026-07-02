@@ -3,6 +3,7 @@
 #include <QString>
 #include <QMediaPlayer>
 #include <QObject>
+#include <QUrl>
 
 // =============================================================================
 // AudioPlayer — 音频播放封装（core 层）
@@ -21,6 +22,8 @@ public:
     explicit AudioPlayer(QObject* parent = nullptr);
 
     void load(const QString& sourcePath);
+    // 加载 HTTP/HTTPS 串流或任意 QUrl 音源
+    void loadUrl(const QUrl& sourceUrl);
     void play();
     void pause();
     void setVolume(int volume);

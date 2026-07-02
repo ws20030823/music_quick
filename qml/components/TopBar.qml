@@ -147,8 +147,8 @@ Rectangle {
                         color: Theme.textPrimary
                         background: Item {}
                         onAccepted: {
+                            root.searchSubmitted(text.trim())
                             app.currentPage = 2
-                            root.searchSubmitted(text)
                         }
                     }
                 }

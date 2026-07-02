@@ -1,32 +1,38 @@
 #pragma once
 
 // =============================================================================
-// AppController — QML 与 core/media 的唯一桥接（app 层）
+// AppController — QML 与 core/media/network 的唯一桥接（app 层）
 // =============================================================================
 // 职责：
-//   - 持有 AudioPlayer、PlaybackController、TrackListModel
+//   - 本地播放：TrackListModel + AudioPlayer + PlaybackController
+//   - 在线搜索：SearchResultModel + MyFreeMp3Client（MyFreeMp3 站 HTML 解析）
 //   - 通过 Q_PROPERTY / Q_INVOKABLE 暴露给 QML（contextProperty 名 "app"）
-//   - 对应 Widgets 版 MainWindow 中的业务编排，但不依赖任何 QWidget
 // =============================================================================
 
+#include "app/SearchResultModel.h"
 #include "app/TrackListModel.h"
 #include "core/AudioPlayer.h"
 #include "core/PlaybackController.h"
 #include "core/PlaybackMode.h"
+#include "network/OnlineTrack.h"
 
 #include <QImage>
+#include <QNetworkAccessManager>
 #include <QObject>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
 #include <QMediaPlayer>
 
+class MyFreeMp3Client;
+class OnlineStreamLoader;
+
 class AppController final : public QObject
 {
     Q_OBJECT
 
-    // --- QML 可绑定属性 ---
     Q_PROPERTY(TrackListModel* trackModel READ trackModel CONSTANT)
+    Q_PROPERTY(SearchResultModel* searchResultModel READ searchResultModel CONSTANT)
     Q_PROPERTY(int currentPage READ currentPage WRITE setCurrentPage NOTIFY currentPageChanged)
     Q_PROPERTY(bool isPlaying READ isPlaying NOTIFY playbackStateChanged)
     Q_PROPERTY(bool canControl READ canControl NOTIFY canControlChanged)
@@ -44,17 +50,26 @@ class AppController final : public QObject
     Q_PROPERTY(int trackCount READ trackCount NOTIFY trackCountChanged)
     Q_PROPERTY(bool queueVisible READ queueVisible WRITE setQueueVisible NOTIFY queueVisibleChanged)
 
+    // --- 在线搜索状态（供 SearchPage 绑定）---
+    Q_PROPERTY(bool searchBusy READ searchBusy NOTIFY searchBusyChanged)
+    Q_PROPERTY(QString searchKeyword READ searchKeyword NOTIFY searchKeywordChanged)
+    Q_PROPERTY(QString searchStatus READ searchStatus NOTIFY searchStatusChanged)
+    Q_PROPERTY(int searchCurrentPage READ searchCurrentPage NOTIFY searchPaginationChanged)
+    Q_PROPERTY(bool searchHasNext READ searchHasNext NOTIFY searchPaginationChanged)
+    Q_PROPERTY(bool searchHasPrevious READ searchHasPrevious NOTIFY searchPaginationChanged)
+    Q_PROPERTY(int searchResultCount READ searchResultCount NOTIFY searchResultCountChanged)
+
 public:
     explicit AppController(QObject* parent = nullptr);
+    ~AppController() override;
 
-    // 歌曲列表模型，供 ListView / SongList 绑定
     TrackListModel* trackModel();
-    // 当前页面索引：0 首页 / 1 本地音乐 / 2 搜索
+    SearchResultModel* searchResultModel();
+
     int currentPage() const;
     void setCurrentPage(int page);
 
     bool isPlaying() const;
-    // 是否已加载曲目，可启用播放控制按钮
     bool canControl() const;
     QString currentTitle() const;
     QString currentArtist() const;
@@ -65,7 +80,6 @@ public:
     qint64 duration() const;
     int volume() const;
     void setVolume(int value);
-    // 播放模式枚举值，对应 PlaybackDisplayMode
     int playbackMode() const;
     QString playbackModeTooltip() const;
     QString statusText() const;
@@ -73,7 +87,14 @@ public:
     bool queueVisible() const;
     void setQueueVisible(bool visible);
 
-    // --- QML 可调用方法 ---
+    bool searchBusy() const;
+    QString searchKeyword() const;
+    QString searchStatus() const;
+    int searchCurrentPage() const;
+    bool searchHasNext() const;
+    bool searchHasPrevious() const;
+    int searchResultCount() const;
+
     Q_INVOKABLE void importFiles(const QList<QUrl>& urls);
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void playRow(int row);
@@ -81,9 +102,14 @@ public:
     Q_INVOKABLE void playPrevious();
     Q_INVOKABLE void cyclePlaybackMode();
     Q_INVOKABLE void seek(qint64 ms);
-    // 返回队列面板用的 QVariantList（title/artist/duration/isPlaying/row）
     Q_INVOKABLE QVariantList queueItems() const;
     Q_INVOKABLE void playQueueRow(int row);
+
+    // --- 在线搜索：由 TopBar / SearchPage 调用 ---
+    Q_INVOKABLE void searchOnline(const QString& keyword, int page = 1);
+    Q_INVOKABLE void searchNextPage();
+    Q_INVOKABLE void searchPreviousPage();
+    Q_INVOKABLE void playSearchRow(int row);
 
 signals:
     void currentPageChanged();
@@ -98,23 +124,51 @@ signals:
     void queueVisibleChanged();
     void canControlChanged();
 
+    void searchBusyChanged();
+    void searchKeywordChanged();
+    void searchStatusChanged();
+    void searchPaginationChanged();
+    void searchResultCountChanged();
+
+private slots:
+    void onSearchCompleted(const SearchPageResult& result, const QString& keyword);
+    void onSearchFailed(const QString& message);
+    void onStreamUrlResolved(const OnlineTrack& track);
+    void onStreamUrlFailed(const QString& songId, const QString& message);
+    void onStreamPrefetchReady(const QString& localFilePath, const QUrl& originalUrl);
+    void onStreamPrefetchFailed(const QUrl& originalUrl, const QString& message);
+
 private:
-    // 按行号加载音频并更新播放栏；autoPlay 控制是否立即播放
     void loadTrack(int row, bool autoPlay);
-    // 同步曲目数并重建随机播放顺序
+    void loadOnlineStream(const QString& streamUrl,
+                          const QString& title,
+                          const QString& artist,
+                          const QImage& cover,
+                          bool autoPlay);
     void rebuildShuffleOrder();
-    // 根据 navigateNext/Previous 结果切歌或重播/停止
     void applyNavigateResult(const PlaybackNavigateResult& result, int currentRow);
-    // 从 PlaybackController 状态同步 playbackMode / tooltip
     void updatePlaybackModeProperties();
     void setStatus(const QString& text);
+    void setSearchBusy(bool busy);
+    void setSearchStatus(const QString& text);
+    void applySearchPageResult(const SearchPageResult& result);
+    void downloadSearchCover(int row, const QUrl& coverUrl);
 
     TrackListModel m_trackModel;
+    SearchResultModel m_searchResultModel;
     AudioPlayer m_audioPlayer;
     PlaybackController m_playbackController;
+    MyFreeMp3Client* m_myFreeMp3Client = nullptr;
+    OnlineStreamLoader* m_streamLoader = nullptr;
+    QNetworkAccessManager m_coverNetwork;
+
+    bool m_pendingStreamAutoPlay = false;
 
     int m_currentPage = 0;
     int m_currentRow = -1;
+    bool m_isOnlinePlayback = false;
+    int m_pendingSearchRow = -1;
+
     QString m_currentFilePath;
     QString m_currentTitle;
     QString m_currentArtist;
@@ -127,4 +181,11 @@ private:
     QString m_playbackModeTooltip = QStringLiteral("顺序播放");
     QString m_statusText = QStringLiteral("就绪");
     bool m_queueVisible = false;
+
+    QString m_searchKeyword;
+    QString m_searchStatus = QStringLiteral("输入关键词，探索在线曲库");
+    bool m_searchBusy = false;
+    int m_searchCurrentPage = 1;
+    bool m_searchHasNext = false;
+    bool m_searchHasPrevious = false;
 };

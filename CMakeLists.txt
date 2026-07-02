@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 QuickEffects Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 QuickEffects Multimedia Network)
 if(NOT ANDROID)
     find_package(Qt6 REQUIRED COMPONENTS Test)
 endif()
@@ -38,6 +38,15 @@ qt_add_executable(MusicQuick
     src/app/AppController.h
     src/app/TrackListModel.cpp
     src/app/TrackListModel.h
+    src/app/SearchResultModel.cpp
+    src/app/SearchResultModel.h
+    src/network/MyFreeMp3Parser.cpp
+    src/network/MyFreeMp3Parser.h
+    src/network/MyFreeMp3Client.cpp
+    src/network/MyFreeMp3Client.h
+    src/network/OnlineStreamLoader.cpp
+    src/network/OnlineStreamLoader.h
+    src/network/OnlineTrack.h
 )
 
 set(MUSICQUICK_ICON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons")
@@ -87,6 +96,7 @@ target_link_libraries(MusicQuick PRIVATE
     Qt6::QuickControls2
     Qt6::QuickEffects
     Qt6::Multimedia
+    Qt6::Network
 )
 
 if(WIN32 AND NOT ANDROID)

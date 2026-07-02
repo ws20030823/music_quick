@@ -233,14 +233,8 @@ Rectangle {
 
 
         background: Item {
-
             id: navBg
-
             implicitHeight: navBtn.subtitle !== "" ? 48 : 40
-
-            implicitWidth: navBtn.width
-
-
 
             Rectangle {
 
@@ -275,12 +269,8 @@ Rectangle {
 
 
         contentItem: Item {
-
             implicitHeight: navBtn.subtitle !== "" ? 48 : 40
-
-            implicitWidth: navBtn.width
-
-
+            width: navBtn.width
 
             Text {
 

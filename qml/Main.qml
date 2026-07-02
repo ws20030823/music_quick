@@ -34,10 +34,23 @@ ApplicationWindow {
         spacing: 0
 
         TopBar {
+            id: topBar
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.topBarHeight
             window: root
-            onSearchSubmitted: function(keyword) { root.goToPage(2) }
+            onSearchSubmitted: function(keyword) {
+                app.searchOnline(keyword, 1)
+                root.goToPage(2)
+            }
+        }
+
+        Connections {
+            target: app
+            function onSearchKeywordChanged() {
+                if (topBar.searchField.text !== app.searchKeyword) {
+                    topBar.searchField.text = app.searchKeyword
+                }
+            }
         }
 
         RowLayout {

@@ -40,9 +40,14 @@ void AudioPlayer::play()
 // 切换音源前先 stop，避免上一首的播放状态残留
 void AudioPlayer::load(const QString& sourcePath)
 {
+    loadUrl(QUrl::fromLocalFile(sourcePath));
+}
+
+void AudioPlayer::loadUrl(const QUrl& sourceUrl)
+{
     player->stop();
-    player->setSource(QUrl::fromLocalFile(sourcePath));
-};
+    player->setSource(sourceUrl);
+}
 
 // 暂停当前播放
 void AudioPlayer::pause()
