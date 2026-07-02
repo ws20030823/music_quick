@@ -1,22 +1,21 @@
-// =============================================================================
-// Main.qml — 应用主窗口
-// 布局：SideNav + StackLayout(三页) + PlaybackBar；FileDialog 导入；QueueDialog 队列
-// =============================================================================
+// Main.qml — 无边框窗口 + 侧栏 + 顶栏 + 全宽底栏
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtQuick.Window
 import MusicQuick
 
 ApplicationWindow {
     id: root
-    width: 1100
-    height: 720
-    minimumWidth: 900
-    minimumHeight: 600
+    width: 1180
+    height: 760
+    minimumWidth: 960
+    minimumHeight: 640
     visible: true
     title: qsTr("Music Quick")
     color: Theme.bgBase
+    flags: Qt.Window | Qt.FramelessWindowHint
 
     FileDialog {
         id: importDialog
@@ -26,53 +25,54 @@ ApplicationWindow {
         onAccepted: app.importFiles(selectedFiles)
     }
 
-    RowLayout {
+    function goToPage(page) {
+        app.currentPage = page
+    }
+
+    ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
-        SideNav {
-            Layout.preferredWidth: Theme.sidebarWidth
-            Layout.minimumWidth: Theme.sidebarWidth
-            Layout.fillHeight: true
-            currentPage: app.currentPage
-            onNavigate: function(page) { app.currentPage = page }
-            onImportClicked: importDialog.open()
+        TopBar {
+            Layout.fillWidth: true
+            Layout.preferredHeight: Theme.topBarHeight
+            window: root
+            onSearchSubmitted: function(keyword) { root.goToPage(2) }
         }
 
-        Rectangle {
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: Theme.bgBase
+            spacing: 0
 
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 0
-
-                StackLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    currentIndex: app.currentPage
-
-                    HomePage { }
-                    LocalMusicPage {
-                        trackModel: app.trackModel
-                        onImportClicked: importDialog.open()
-                    }
-                    SearchPage { }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                    color: Theme.border
-                }
-
-                PlaybackBar {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Theme.playbackBarHeight
-                    Layout.minimumHeight: Theme.playbackBarHeight
-                }
+            SideNav {
+                Layout.preferredWidth: Theme.sidebarWidth
+                Layout.minimumWidth: Theme.sidebarWidth
+                Layout.fillHeight: true
+                currentPage: app.currentPage
+                onNavigate: function(page) { root.goToPage(page) }
             }
+
+            StackLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                currentIndex: app.currentPage
+
+                HomePage {
+                    onOpenLocalMusic: root.goToPage(1)
+                }
+                LocalMusicPage {
+                    trackModel: app.trackModel
+                    onImportClicked: importDialog.open()
+                }
+                SearchPage { }
+            }
+        }
+
+        PlaybackBar {
+            Layout.fillWidth: true
+            Layout.preferredHeight: Theme.playbackBarHeight
+            Layout.minimumHeight: Theme.playbackBarHeight
         }
     }
 

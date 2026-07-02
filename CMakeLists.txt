@@ -40,7 +40,26 @@ qt_add_executable(MusicQuick
     src/app/TrackListModel.h
 )
 
-qt_add_resources(MusicQuick app_icons resources/app_icons.qrc)
+set(MUSICQUICK_ICON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons")
+set(MUSICQUICK_ICON_NAMES
+    play.svg pause.svg prev.svg next.svg
+    shuffle.svg repeat-all.svg repeat-one.svg
+    playlist.svg volume.svg
+    minimize.svg maximize.svg restore.svg close.svg
+)
+set(MUSICQUICK_ICON_FILES "")
+foreach(_icon IN LISTS MUSICQUICK_ICON_NAMES)
+    set(_icon_path "${MUSICQUICK_ICON_DIR}/${_icon}")
+    set_source_files_properties("${_icon_path}" PROPERTIES QT_RESOURCE_ALIAS "${_icon}")
+    list(APPEND MUSICQUICK_ICON_FILES "${_icon_path}")
+endforeach()
+set(MUSICQUICK_LOGO_FILE "${MUSICQUICK_ICON_DIR}/GankDream-03-origami-dove.svg")
+set_source_files_properties("${MUSICQUICK_LOGO_FILE}" PROPERTIES QT_RESOURCE_ALIAS "logo.svg")
+list(APPEND MUSICQUICK_ICON_FILES "${MUSICQUICK_LOGO_FILE}")
+qt_add_resources(MusicQuick "app_icons"
+    PREFIX "/icons"
+    FILES ${MUSICQUICK_ICON_FILES}
+)
 
 qt_add_qml_module(MusicQuick
     URI MusicQuick
@@ -50,6 +69,8 @@ qt_add_qml_module(MusicQuick
         qml/Theme.qml
         qml/Icons.qml
         qml/components/AppIcon.qml
+        qml/components/TopBar.qml
+        qml/components/WindowControls.qml
         qml/components/SideNav.qml
         qml/components/PlaybackBar.qml
         qml/components/SongList.qml

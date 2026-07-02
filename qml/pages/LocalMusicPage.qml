@@ -1,4 +1,4 @@
-// LocalMusicPage.qml — 本地音乐列表页
+// LocalMusicPage.qml — 本地音乐列表
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -11,33 +11,37 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 24
-        spacing: 12
+        anchors.margins: Theme.pagePadding
+        spacing: Theme.sectionGap
 
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
 
-            Text {
-                text: qsTr("本地音乐")
-                font.pixelSize: 22
-                font.bold: true
-                color: Theme.textPrimary
+            ColumnLayout {
+                spacing: 4
+                Text {
+                    text: qsTr("本地音乐")
+                    font.pixelSize: 22
+                    font.bold: true
+                    color: Theme.textPrimary
+                }
+                Text {
+                    text: app.trackCount > 0
+                          ? qsTr("共 %1 首歌曲").arg(app.trackCount)
+                          : qsTr("导入本地音频文件开始播放")
+                    font.pixelSize: 13
+                    color: Theme.textSecondary
+                }
             }
 
             Item { Layout.fillWidth: true }
-
-            Text {
-                text: qsTr("共 %1 首歌曲").arg(app.trackCount)
-                font.pixelSize: 13
-                color: Theme.textSecondary
-            }
 
             Button {
                 text: qsTr("导入音乐")
                 onClicked: root.importClicked()
                 background: Rectangle {
-                    radius: 8
+                    radius: Theme.radiusMd
                     color: parent.down ? Theme.accent
                          : (parent.hovered ? "#1A0078D4" : Theme.accentSoft)
                 }
@@ -60,7 +64,7 @@ Item {
         Text {
             Layout.fillWidth: true
             visible: app.trackCount === 0
-            text: qsTr("暂无歌曲，请点击「导入音乐」添加本地音频文件")
+            text: qsTr("暂无歌曲，点击上方「导入音乐」添加本地音频文件")
             color: Theme.textTertiary
             font.pixelSize: 13
             horizontalAlignment: Text.AlignHCenter

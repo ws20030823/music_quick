@@ -6,11 +6,12 @@ import MusicQuick
 Item {
     id: root
 
-    // Icons.qml 中的名称，如 Icons.play
     property string name: ""
     property int size: 24
-    property color color: Theme.textSecondary
+    property color color: Theme.textPrimary
 
+    width: size
+    height: size
     implicitWidth: size
     implicitHeight: size
 
@@ -18,8 +19,10 @@ Item {
         id: image
         anchors.fill: parent
         source: root.name !== "" ? Icons.url(root.name) : ""
-        sourceSize: Qt.size(root.size, root.size)
+        sourceSize: Qt.size(root.size * 2, root.size * 2)
         fillMode: Image.PreserveAspectFit
+        smooth: true
+        antialiasing: true
         visible: false
     }
 

@@ -8,6 +8,9 @@ import QtQuick
 // 新增图标：放入 resources/icons/ 并在 CMake RESOURCES 中注册，再于此添加常量。
 // =============================================================================
 QtObject {
+    // 应用 Logo（彩色 SVG，TopBar 用 Image 直接加载，勿用 AppIcon 染色）
+    readonly property string logo: "logo"
+
     // 播放控制
     readonly property string play: "play"
     readonly property string pause: "pause"
@@ -15,6 +18,12 @@ QtObject {
     readonly property string next: "next"
     readonly property string volume: "volume"
     readonly property string playlist: "playlist"
+
+    // 窗口控制
+    readonly property string minimize: "minimize"
+    readonly property string maximize: "maximize"
+    readonly property string restore: "restore"
+    readonly property string close: "close"
 
     // 播放模式（顺序模式暂用 playlist 图标，后续可换 list-ordered.svg）
     readonly property string shuffle: "shuffle"
