@@ -9,6 +9,8 @@
 //   - 通过 Q_PROPERTY / Q_INVOKABLE 暴露给 QML（contextProperty 名 "app"）
 // =============================================================================
 
+#include "app/PlaylistStore.h"
+#include "app/PlaylistTrackModel.h"
 #include "app/SearchResultModel.h"
 #include "app/TrackListModel.h"
 #include "core/AudioPlayer.h"
@@ -59,6 +61,13 @@ class AppController final : public QObject
     Q_PROPERTY(bool searchHasPrevious READ searchHasPrevious NOTIFY searchPaginationChanged)
     Q_PROPERTY(int searchResultCount READ searchResultCount NOTIFY searchResultCountChanged)
 
+    Q_PROPERTY(PlaylistTrackModel* playlistTrackModel READ playlistTrackModel CONSTANT)
+    Q_PROPERTY(QVariantList sidebarPlaylists READ sidebarPlaylists NOTIFY playlistsChanged)
+    Q_PROPERTY(QString activePlaylistId READ activePlaylistId WRITE setActivePlaylistId NOTIFY activePlaylistIdChanged)
+    Q_PROPERTY(QString activePlaylistName READ activePlaylistName NOTIFY activePlaylistContentChanged)
+    Q_PROPERTY(int activePlaylistTrackCount READ activePlaylistTrackCount NOTIFY activePlaylistContentChanged)
+    Q_PROPERTY(int likedTrackCount READ likedTrackCount NOTIFY playlistsChanged)
+
 public:
     explicit AppController(QObject* parent = nullptr);
     ~AppController() override;
@@ -95,9 +104,22 @@ public:
     bool searchHasPrevious() const;
     int searchResultCount() const;
 
+    PlaylistTrackModel* playlistTrackModel();
+    QVariantList sidebarPlaylists() const;
+    QString activePlaylistId() const;
+    void setActivePlaylistId(const QString& id);
+    QString activePlaylistName() const;
+    int activePlaylistTrackCount() const;
+    int likedTrackCount() const;
+
     Q_INVOKABLE void importFiles(const QList<QUrl>& urls);
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void playRow(int row);
+    Q_INVOKABLE void selectLocalRow(int row);
+    Q_INVOKABLE void selectSearchRow(int row);
+    Q_INVOKABLE void selectPlaylistRow(int row);
+    Q_INVOKABLE void toggleLikeLocalRow(int row);
+    Q_INVOKABLE void playAllLocal();
     Q_INVOKABLE void playNext();
     Q_INVOKABLE void playPrevious();
     Q_INVOKABLE void cyclePlaybackMode();
@@ -110,6 +132,18 @@ public:
     Q_INVOKABLE void searchNextPage();
     Q_INVOKABLE void searchPreviousPage();
     Q_INVOKABLE void playSearchRow(int row);
+
+    Q_INVOKABLE void playAllSearchResults();
+    Q_INVOKABLE void likeAllSearchResults();
+    Q_INVOKABLE void toggleLikeSearchRow(int row);
+    Q_INVOKABLE bool isSearchRowLiked(int row) const;
+    Q_INVOKABLE void addSearchRowToPlaylist(int row, const QString& playlistId);
+    Q_INVOKABLE QString createPlaylist(const QString& name);
+    Q_INVOKABLE bool deletePlaylist(const QString& id);
+    Q_INVOKABLE void openPlaylist(const QString& id);
+    Q_INVOKABLE void refreshActivePlaylist();
+    Q_INVOKABLE void playPlaylistRow(int row);
+    Q_INVOKABLE void removePlaylistTrack(int row);
 
 signals:
     void currentPageChanged();
@@ -129,6 +163,9 @@ signals:
     void searchStatusChanged();
     void searchPaginationChanged();
     void searchResultCountChanged();
+    void playlistsChanged();
+    void activePlaylistIdChanged();
+    void activePlaylistContentChanged();
 
 private slots:
     void onSearchCompleted(const SearchPageResult& result, const QString& keyword);
@@ -153,9 +190,17 @@ private:
     void setSearchStatus(const QString& text);
     void applySearchPageResult(const SearchPageResult& result);
     void downloadSearchCover(int row, const QUrl& coverUrl);
+    void syncSearchLikedStates();
+    void syncLocalLikedStates();
+    void reloadActivePlaylistModel();
+    PlaylistTrackRef trackRefFromSearchRow(int row) const;
+    PlaylistTrackRef trackRefFromLocalRow(int row) const;
+    void playOnlineTrackRef(const PlaylistTrackRef& track, bool autoPlay);
 
     TrackListModel m_trackModel;
     SearchResultModel m_searchResultModel;
+    PlaylistTrackModel m_playlistTrackModel;
+    PlaylistStore m_playlistStore;
     AudioPlayer m_audioPlayer;
     PlaybackController m_playbackController;
     MyFreeMp3Client* m_myFreeMp3Client = nullptr;
@@ -188,4 +233,7 @@ private:
     int m_searchCurrentPage = 1;
     bool m_searchHasNext = false;
     bool m_searchHasPrevious = false;
+
+    QString m_activePlaylistId;
+    int m_pendingPlaylistRow = -1;
 };

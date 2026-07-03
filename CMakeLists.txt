@@ -40,6 +40,10 @@ qt_add_executable(MusicQuick
     src/app/TrackListModel.h
     src/app/SearchResultModel.cpp
     src/app/SearchResultModel.h
+    src/app/PlaylistStore.cpp
+    src/app/PlaylistStore.h
+    src/app/PlaylistTrackModel.cpp
+    src/app/PlaylistTrackModel.h
     src/network/MyFreeMp3Parser.cpp
     src/network/MyFreeMp3Parser.h
     src/network/MyFreeMp3Client.cpp
@@ -54,6 +58,8 @@ set(MUSICQUICK_ICON_NAMES
     play.svg pause.svg prev.svg next.svg
     shuffle.svg repeat-all.svg repeat-one.svg
     playlist.svg volume.svg
+    heart.svg heart-filled.svg folder-plus.svg
+    search.svg chevron-left.svg mic.svg
     minimize.svg maximize.svg restore.svg close.svg
 )
 set(MUSICQUICK_ICON_FILES "")
@@ -83,10 +89,14 @@ qt_add_qml_module(MusicQuick
         qml/components/SideNav.qml
         qml/components/PlaybackBar.qml
         qml/components/SongList.qml
+        qml/components/SearchResultList.qml
+        qml/components/LocalMusicList.qml
+        qml/components/CreatePlaylistDialog.qml
         qml/components/QueueDialog.qml
         qml/pages/HomePage.qml
         qml/pages/LocalMusicPage.qml
         qml/pages/SearchPage.qml
+        qml/pages/PlaylistPage.qml
 )
 
 target_include_directories(MusicQuick PRIVATE "${CMAKE_SOURCE_DIR}/src")

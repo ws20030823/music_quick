@@ -29,6 +29,12 @@ QtObject {
     readonly property string shuffle: "shuffle"
     readonly property string repeatAll: "repeat-all"
     readonly property string repeatOne: "repeat-one"
+    readonly property string heart: "heart"
+    readonly property string heartFilled: "heart-filled"
+    readonly property string folderPlus: "folder-plus"
+    readonly property string search: "search"
+    readonly property string chevronLeft: "chevron-left"
+    readonly property string mic: "mic"
 
     // 返回 qrc 路径
     function url(name) {

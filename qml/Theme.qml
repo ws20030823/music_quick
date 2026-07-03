@@ -15,6 +15,9 @@ QtObject {
     // 卡片/顶栏/底栏/弹窗等白色面板
     readonly property color bgCard: "#FFFFFF"
 
+    // 顶栏背景（网易云浅灰）
+    readonly property color topBarBg: "#F4F4F5"
+
     // 鼠标悬停时的半透明遮罩（约 10% 黑）
     readonly property color bgHover: "#0A000000"
 
@@ -82,4 +85,13 @@ QtObject {
     readonly property color searchHeroEnd: "#F3F3F7"
     readonly property int searchChipHeight: 32
     readonly property int searchHeroHeight: 120
+
+    // ── 搜索结果表格（网易云布局）──
+    readonly property int searchRowHeight: 56
+    readonly property int searchTableHeaderHeight: 36
+    readonly property int searchIndexWidth: 36
+    readonly property int searchAlbumWidth: 160
+    readonly property int searchLikeWidth: 40
+    readonly property int searchDurationWidth: 48
+    readonly property int searchFileSizeWidth: 56
 }

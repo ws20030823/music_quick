@@ -15,6 +15,8 @@
 int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
+    QGuiApplication::setOrganizationName(QStringLiteral("MusicQuick"));
+    QGuiApplication::setApplicationName(QStringLiteral("MusicQuick"));
     // 使用 Basic 风格，避免依赖系统原生控件主题
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 

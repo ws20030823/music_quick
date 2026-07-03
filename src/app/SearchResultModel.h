@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QSet>
 #include <QVector>
 
 #include "media/TrackMetadata.h"
@@ -18,6 +19,7 @@ struct SearchResultEntry {
     QString coverUrl;
     TrackMetadata metadata;
     bool isPlaying = false;
+    bool isSelected = false;
 };
 
 class SearchResultModel final : public QAbstractListModel
@@ -38,6 +40,8 @@ public:
         SongIdRole,
         StreamUrlRole,
         SourceLabelRole,
+        IsLikedRole,
+        IsSelectedRole,
     };
 
     explicit SearchResultModel(QObject* parent = nullptr);
@@ -52,12 +56,19 @@ public:
     void setPlayingRow(int row);
     int playingRow() const;
 
+    void setSelectedRow(int row);
+    int selectedRow() const;
+
     QString songIdAt(int row) const;
     QString streamUrlAt(int row) const;
     void updateStreamUrl(int row, const QString& streamUrl, const QString& coverUrl);
     void updateCover(int row, const QImage& cover);
+    void setLikedSongIds(const QSet<QString>& songIds);
+    void refreshLikedState(int row, bool liked);
 
 private:
     QVector<SearchResultEntry> m_entries;
     int m_playingRow = -1;
+    int m_selectedRow = -1;
+    QSet<QString> m_likedSongIds;
 };

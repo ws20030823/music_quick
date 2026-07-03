@@ -28,7 +28,7 @@ QVariant SearchResultModel::data(const QModelIndex& index, int role) const
     case ArtistRole:
         return entry.metadata.artist;
     case AlbumRole:
-        return QStringLiteral("在线音乐");
+        return entry.metadata.album.isEmpty() ? QStringLiteral("在线音乐") : entry.metadata.album;
     case DurationRole:
         return entry.metadata.durationText;
     case HasCoverRole:
@@ -45,6 +45,10 @@ QVariant SearchResultModel::data(const QModelIndex& index, int role) const
         return entry.streamUrl;
     case SourceLabelRole:
         return QStringLiteral("MyFreeMp3");
+    case IsLikedRole:
+        return m_likedSongIds.contains(entry.songId);
+    case IsSelectedRole:
+        return entry.isSelected;
     default:
         return {};
     }
@@ -65,7 +69,32 @@ QHash<int, QByteArray> SearchResultModel::roleNames() const
         {SongIdRole, "songId"},
         {StreamUrlRole, "streamUrl"},
         {SourceLabelRole, "sourceLabel"},
+        {IsLikedRole, "isLiked"},
+        {IsSelectedRole, "isSelected"},
     };
+}
+
+void SearchResultModel::setLikedSongIds(const QSet<QString>& songIds)
+{
+    m_likedSongIds = songIds;
+    if (m_entries.isEmpty()) {
+        return;
+    }
+    emit dataChanged(index(0), index(m_entries.size() - 1), {IsLikedRole});
+}
+
+void SearchResultModel::refreshLikedState(int row, bool liked)
+{
+    if (row < 0 || row >= m_entries.size()) {
+        return;
+    }
+    const QString songId = m_entries.at(row).songId;
+    if (liked) {
+        m_likedSongIds.insert(songId);
+    } else {
+        m_likedSongIds.remove(songId);
+    }
+    emit dataChanged(index(row), index(row), {IsLikedRole});
 }
 
 void SearchResultModel::setResults(QVector<SearchResultEntry> entries)
@@ -73,6 +102,7 @@ void SearchResultModel::setResults(QVector<SearchResultEntry> entries)
     beginResetModel();
     m_entries = std::move(entries);
     m_playingRow = -1;
+    m_selectedRow = -1;
     endResetModel();
 }
 
@@ -103,6 +133,30 @@ void SearchResultModel::setPlayingRow(int row)
 int SearchResultModel::playingRow() const
 {
     return m_playingRow;
+}
+
+void SearchResultModel::setSelectedRow(int row)
+{
+    if (m_selectedRow == row) {
+        return;
+    }
+
+    auto updateRow = [this](int r, bool selected) {
+        if (r < 0 || r >= m_entries.size()) {
+            return;
+        }
+        m_entries[r].isSelected = selected;
+        emit dataChanged(index(r), index(r), {IsSelectedRole});
+    };
+
+    updateRow(m_selectedRow, false);
+    m_selectedRow = row;
+    updateRow(m_selectedRow, true);
+}
+
+int SearchResultModel::selectedRow() const
+{
+    return m_selectedRow;
 }
 
 QString SearchResultModel::songIdAt(int row) const

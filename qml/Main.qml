@@ -27,6 +27,9 @@ ApplicationWindow {
 
     function goToPage(page) {
         app.currentPage = page
+        if (page !== 3) {
+            app.activePlaylistId = ""
+        }
     }
 
     ColumnLayout {
@@ -79,6 +82,7 @@ ApplicationWindow {
                     onImportClicked: importDialog.open()
                 }
                 SearchPage { }
+                PlaylistPage { }
             }
         }
 

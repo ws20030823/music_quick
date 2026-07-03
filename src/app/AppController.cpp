@@ -5,6 +5,7 @@
 #include "network/OnlineStreamLoader.h"
 
 #include <QFileInfo>
+#include <QFileInfo>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrl>
@@ -79,6 +80,19 @@ AppController::AppController(QObject* parent)
         const PlaybackNavigateResult result = m_playbackController.navigateNext(m_currentRow);
         applyNavigateResult(result, m_currentRow);
     });
+
+    connect(&m_playlistStore, &PlaylistStore::playlistsChanged, this, [this]() {
+        syncSearchLikedStates();
+        syncLocalLikedStates();
+        if (!m_activePlaylistId.isEmpty()) {
+            reloadActivePlaylistModel();
+        }
+        emit playlistsChanged();
+    });
+
+    m_activePlaylistId = QStringLiteral("liked");
+    reloadActivePlaylistModel();
+    syncLocalLikedStates();
 }
 
 AppController::~AppController() = default;
@@ -93,15 +107,26 @@ SearchResultModel* AppController::searchResultModel()
     return &m_searchResultModel;
 }
 
+PlaylistTrackModel* AppController::playlistTrackModel()
+{
+    return &m_playlistTrackModel;
+}
+
 int AppController::currentPage() const { return m_currentPage; }
 
 void AppController::setCurrentPage(int page)
 {
     if (m_currentPage == page) {
+        if (page == 3 && !m_activePlaylistId.isEmpty()) {
+            reloadActivePlaylistModel();
+        }
         return;
     }
     m_currentPage = page;
     emit currentPageChanged();
+    if (page == 3 && !m_activePlaylistId.isEmpty()) {
+        reloadActivePlaylistModel();
+    }
 }
 
 bool AppController::isPlaying() const
@@ -165,6 +190,48 @@ int AppController::searchCurrentPage() const { return m_searchCurrentPage; }
 bool AppController::searchHasNext() const { return m_searchHasNext; }
 bool AppController::searchHasPrevious() const { return m_searchHasPrevious; }
 int AppController::searchResultCount() const { return m_searchResultModel.rowCount(); }
+
+QVariantList AppController::sidebarPlaylists() const
+{
+    QVariantList items;
+    for (const PlaylistInfo& info : m_playlistStore.playlists()) {
+        QVariantMap map;
+        map.insert(QStringLiteral("id"), info.id);
+        map.insert(QStringLiteral("name"), info.name);
+        map.insert(QStringLiteral("builtin"), info.builtin);
+        map.insert(QStringLiteral("trackCount"), info.tracks.size());
+        items.append(map);
+    }
+    return items;
+}
+
+QString AppController::activePlaylistId() const { return m_activePlaylistId; }
+
+void AppController::setActivePlaylistId(const QString& id)
+{
+    const bool idChanged = m_activePlaylistId != id;
+    if (idChanged) {
+        m_activePlaylistId = id;
+        emit activePlaylistIdChanged();
+    }
+    reloadActivePlaylistModel();
+}
+
+QString AppController::activePlaylistName() const
+{
+    const PlaylistInfo* playlist = m_playlistStore.playlistById(m_activePlaylistId);
+    return playlist ? playlist->name : QString();
+}
+
+int AppController::activePlaylistTrackCount() const
+{
+    return m_playlistStore.trackCount(m_activePlaylistId);
+}
+
+int AppController::likedTrackCount() const
+{
+    return m_playlistStore.trackCount(QStringLiteral("liked"));
+}
 
 void AppController::setSearchBusy(bool busy)
 {
@@ -237,6 +304,7 @@ void AppController::applySearchPageResult(const SearchPageResult& result)
     m_searchCurrentPage = result.currentPage;
     m_searchHasNext = result.hasNext;
     m_searchHasPrevious = result.hasPrevious;
+    syncSearchLikedStates();
     emit searchPaginationChanged();
     emit searchResultCountChanged();
 }
@@ -271,7 +339,10 @@ void AppController::playSearchRow(int row)
 
     m_isOnlinePlayback = true;
     m_pendingSearchRow = row;
+    m_pendingPlaylistRow = -1;
     m_searchResultModel.setPlayingRow(row);
+    m_searchResultModel.setSelectedRow(row);
+    m_playlistTrackModel.setPlayingRow(-1);
 
     const QVector<SearchResultEntry>& entries = m_searchResultModel.entries();
     const SearchResultEntry& entry = entries.at(row);
@@ -295,24 +366,32 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
 {
     setSearchBusy(false);
 
-    if (m_pendingSearchRow < 0) {
+    if (m_pendingSearchRow >= 0) {
+        m_searchResultModel.updateStreamUrl(m_pendingSearchRow, track.streamUrl, track.coverUrl);
+        const QString songId = m_searchResultModel.songIdAt(m_pendingSearchRow);
+        m_playlistStore.updateTrackStreamUrl(songId, track.streamUrl, track.coverUrl);
+        if (!track.coverUrl.isEmpty()) {
+            downloadSearchCover(m_pendingSearchRow, QUrl(track.coverUrl));
+        }
+
+        QImage cover;
+        if (m_pendingSearchRow < m_searchResultModel.entries().size()) {
+            cover = m_searchResultModel.entries().at(m_pendingSearchRow).metadata.cover;
+        }
+
+        const QString title = track.title.isEmpty() ? track.displayTitle : track.title;
+        const QString artist = track.artist.isEmpty() ? QStringLiteral("在线音乐") : track.artist;
+        setSearchStatus(QStringLiteral("正在播放…"));
+        loadOnlineStream(track.streamUrl, title, artist, cover, true);
         return;
     }
 
-    m_searchResultModel.updateStreamUrl(m_pendingSearchRow, track.streamUrl, track.coverUrl);
-    if (!track.coverUrl.isEmpty()) {
-        downloadSearchCover(m_pendingSearchRow, QUrl(track.coverUrl));
+    if (m_pendingPlaylistRow >= 0) {
+        const QString title = track.title.isEmpty() ? track.displayTitle : track.title;
+        const QString artist = track.artist.isEmpty() ? QStringLiteral("在线音乐") : track.artist;
+        setSearchStatus(QStringLiteral("正在播放…"));
+        loadOnlineStream(track.streamUrl, title, artist, {}, true);
     }
-
-    QImage cover;
-    if (m_pendingSearchRow < m_searchResultModel.entries().size()) {
-        cover = m_searchResultModel.entries().at(m_pendingSearchRow).metadata.cover;
-    }
-
-    const QString title = track.title.isEmpty() ? track.displayTitle : track.title;
-    const QString artist = track.artist.isEmpty() ? QStringLiteral("在线音乐") : track.artist;
-    setSearchStatus(QStringLiteral("正在播放…"));
-    loadOnlineStream(track.streamUrl, title, artist, cover, true);
 }
 
 void AppController::onStreamUrlFailed(const QString& songId, const QString& message)
@@ -441,9 +520,11 @@ void AppController::importFiles(const QList<QUrl>& urls)
 
     m_trackModel.setTracks(std::move(tracks));
     emit trackCountChanged();
+    syncLocalLikedStates();
 
     rebuildShuffleOrder();
     m_trackModel.setPlayingRow(0);
+    m_trackModel.setSelectedRow(0);
     loadTrack(0, false);
     setStatus(QStringLiteral("已导入 %1 首歌曲").arg(m_trackModel.rowCount()));
 }
@@ -467,11 +548,100 @@ void AppController::playRow(int row)
 
     m_isOnlinePlayback = false;
     m_pendingSearchRow = -1;
+    m_pendingPlaylistRow = -1;
     m_searchResultModel.setPlayingRow(-1);
+    m_playlistTrackModel.setPlayingRow(-1);
 
     m_playbackController.syncShuffleIndexForRow(row);
     m_trackModel.setPlayingRow(row);
+    m_trackModel.setSelectedRow(row);
     loadTrack(row, true);
+}
+
+void AppController::selectLocalRow(int row)
+{
+    if (row < 0 || row >= m_trackModel.rowCount()) {
+        return;
+    }
+    m_trackModel.setSelectedRow(row);
+}
+
+void AppController::selectSearchRow(int row)
+{
+    if (row < 0 || row >= m_searchResultModel.rowCount()) {
+        return;
+    }
+    m_searchResultModel.setSelectedRow(row);
+}
+
+void AppController::selectPlaylistRow(int row)
+{
+    if (row < 0 || row >= m_playlistTrackModel.rowCount()) {
+        return;
+    }
+    m_playlistTrackModel.setSelectedRow(row);
+}
+
+void AppController::playAllLocal()
+{
+    if (m_trackModel.rowCount() <= 0) {
+        return;
+    }
+    const int row = m_trackModel.selectedRow() >= 0 ? m_trackModel.selectedRow() : 0;
+    playRow(row);
+}
+
+void AppController::toggleLikeLocalRow(int row)
+{
+    const PlaylistTrackRef ref = trackRefFromLocalRow(row);
+    if (ref.songId.isEmpty()) {
+        return;
+    }
+
+    const bool liked = m_playlistStore.containsTrack(QStringLiteral("liked"), ref.songId);
+    if (liked) {
+        m_playlistStore.removeTrack(QStringLiteral("liked"), ref.songId);
+        m_trackModel.refreshLikedState(row, false);
+        setStatus(QStringLiteral("已从「我喜欢的音乐」移除"));
+        return;
+    }
+
+    if (m_playlistStore.addTrack(QStringLiteral("liked"), ref)) {
+        m_trackModel.refreshLikedState(row, true);
+        setStatus(QStringLiteral("已加入「我喜欢的音乐」"));
+    }
+}
+
+PlaylistTrackRef AppController::trackRefFromLocalRow(int row) const
+{
+    PlaylistTrackRef ref;
+    if (row < 0 || row >= m_trackModel.rowCount()) {
+        return ref;
+    }
+    const TrackEntry& entry = m_trackModel.entries().at(row);
+    ref.songId = PlaylistStore::localSongId(entry.filePath);
+    ref.localPath = entry.filePath;
+    ref.title = entry.metadata.title;
+    ref.artist = entry.metadata.artist;
+    ref.album = entry.metadata.album;
+    ref.streamUrl = entry.filePath;
+    return ref;
+}
+
+void AppController::syncLocalLikedStates()
+{
+    QSet<QString> likedIds;
+    const PlaylistInfo* liked = m_playlistStore.playlistById(QStringLiteral("liked"));
+    if (liked) {
+        for (const PlaylistTrackRef& track : liked->tracks) {
+            if (PlaylistStore::isLocalSongId(track.songId) || !track.localPath.isEmpty()) {
+                likedIds.insert(track.songId.isEmpty()
+                    ? PlaylistStore::localSongId(track.localPath)
+                    : track.songId);
+            }
+        }
+    }
+    m_trackModel.setLikedSongIds(likedIds);
 }
 
 void AppController::playNext()
@@ -627,4 +797,258 @@ void AppController::setStatus(const QString& text)
     }
     m_statusText = text;
     emit statusTextChanged();
+}
+
+void AppController::syncSearchLikedStates()
+{
+    QSet<QString> likedIds;
+    const PlaylistInfo* liked = m_playlistStore.playlistById(QStringLiteral("liked"));
+    if (liked) {
+        for (const PlaylistTrackRef& track : liked->tracks) {
+            likedIds.insert(track.songId);
+        }
+    }
+    m_searchResultModel.setLikedSongIds(likedIds);
+}
+
+void AppController::reloadActivePlaylistModel()
+{
+    if (m_activePlaylistId.isEmpty()) {
+        return;
+    }
+
+    const PlaylistInfo* playlist = m_playlistStore.playlistById(m_activePlaylistId);
+    if (!playlist) {
+        m_playlistTrackModel.setTracks({});
+        emit activePlaylistContentChanged();
+        return;
+    }
+
+    QVector<PlaylistTrackEntry> entries;
+    entries.reserve(playlist->tracks.size());
+    for (const PlaylistTrackRef& ref : playlist->tracks) {
+        PlaylistTrackEntry entry;
+        entry.ref = ref;
+        entry.metadata.title = ref.title;
+        entry.metadata.artist = ref.artist;
+        entry.metadata.album = ref.album.isEmpty() ? QStringLiteral("在线音乐") : ref.album;
+        entry.metadata.durationText = QStringLiteral("--:--");
+        entries.append(entry);
+    }
+    m_playlistTrackModel.setTracks(std::move(entries));
+    emit activePlaylistContentChanged();
+}
+
+void AppController::refreshActivePlaylist()
+{
+    reloadActivePlaylistModel();
+}
+
+PlaylistTrackRef AppController::trackRefFromSearchRow(int row) const
+{
+    PlaylistTrackRef ref;
+    if (row < 0 || row >= m_searchResultModel.rowCount()) {
+        return ref;
+    }
+    const SearchResultEntry& entry = m_searchResultModel.entries().at(row);
+    ref.songId = entry.songId;
+    ref.title = entry.metadata.title;
+    ref.artist = entry.metadata.artist;
+    ref.album = entry.metadata.album;
+    ref.streamUrl = entry.streamUrl;
+    ref.coverUrl = entry.coverUrl;
+    return ref;
+}
+
+void AppController::playOnlineTrackRef(const PlaylistTrackRef& track, bool autoPlay)
+{
+    m_isOnlinePlayback = true;
+    m_currentRow = -1;
+    m_currentTitle = track.title;
+    m_currentArtist = track.artist.isEmpty() ? QStringLiteral("在线音乐") : track.artist;
+
+    if (!track.streamUrl.isEmpty()) {
+        loadOnlineStream(track.streamUrl, m_currentTitle, m_currentArtist, {}, autoPlay);
+        return;
+    }
+
+    setSearchBusy(true);
+    setSearchStatus(QStringLiteral("正在获取播放地址…"));
+    m_myFreeMp3Client->resolveStreamUrl(track.songId);
+}
+
+void AppController::playAllSearchResults()
+{
+    if (m_searchResultModel.rowCount() <= 0) {
+        return;
+    }
+    playSearchRow(0);
+}
+
+void AppController::likeAllSearchResults()
+{
+    int added = 0;
+    for (int i = 0; i < m_searchResultModel.rowCount(); ++i) {
+        const PlaylistTrackRef ref = trackRefFromSearchRow(i);
+        if (ref.songId.isEmpty()) {
+            continue;
+        }
+        if (m_playlistStore.addTrack(QStringLiteral("liked"), ref)) {
+            m_searchResultModel.refreshLikedState(i, true);
+            ++added;
+        }
+    }
+    if (added > 0) {
+        setSearchStatus(QStringLiteral("已收藏 %1 首至「我喜欢的音乐」").arg(added));
+    }
+}
+
+bool AppController::isSearchRowLiked(int row) const
+{
+    const PlaylistTrackRef ref = trackRefFromSearchRow(row);
+    if (ref.songId.isEmpty()) {
+        return false;
+    }
+    return m_playlistStore.containsTrack(QStringLiteral("liked"), ref.songId);
+}
+
+void AppController::toggleLikeSearchRow(int row)
+{
+    const PlaylistTrackRef ref = trackRefFromSearchRow(row);
+    if (ref.songId.isEmpty()) {
+        return;
+    }
+
+    const bool liked = m_playlistStore.containsTrack(QStringLiteral("liked"), ref.songId);
+    if (liked) {
+        m_playlistStore.removeTrack(QStringLiteral("liked"), ref.songId);
+        m_searchResultModel.refreshLikedState(row, false);
+        setSearchStatus(QStringLiteral("已从「我喜欢的音乐」移除"));
+        return;
+    }
+
+    if (m_playlistStore.addTrack(QStringLiteral("liked"), ref)) {
+        m_searchResultModel.refreshLikedState(row, true);
+        setSearchStatus(QStringLiteral("已加入「我喜欢的音乐」"));
+    }
+}
+
+void AppController::addSearchRowToPlaylist(int row, const QString& playlistId)
+{
+    const PlaylistTrackRef ref = trackRefFromSearchRow(row);
+    if (ref.songId.isEmpty() || playlistId.isEmpty()) {
+        return;
+    }
+
+    if (m_playlistStore.addTrack(playlistId, ref)) {
+        const PlaylistInfo* playlist = m_playlistStore.playlistById(playlistId);
+        const QString name = playlist ? playlist->name : QStringLiteral("歌单");
+        setSearchStatus(QStringLiteral("已加入「%1」").arg(name));
+        if (playlistId == QStringLiteral("liked")) {
+            m_searchResultModel.refreshLikedState(row, true);
+        }
+    }
+}
+
+QString AppController::createPlaylist(const QString& name)
+{
+    const QString id = m_playlistStore.createPlaylist(name);
+    if (!id.isEmpty()) {
+        setStatus(QStringLiteral("已创建歌单「%1」").arg(name.trimmed()));
+    }
+    return id;
+}
+
+bool AppController::deletePlaylist(const QString& id)
+{
+    const PlaylistInfo* playlist = m_playlistStore.playlistById(id);
+    if (!playlist || playlist->builtin) {
+        return false;
+    }
+    const QString name = playlist->name;
+    if (!m_playlistStore.deletePlaylist(id)) {
+        return false;
+    }
+    if (m_activePlaylistId == id) {
+        setActivePlaylistId(QStringLiteral("liked"));
+        setCurrentPage(3);
+    }
+    setStatus(QStringLiteral("已删除歌单「%1」").arg(name));
+    return true;
+}
+
+void AppController::openPlaylist(const QString& id)
+{
+    if (!m_playlistStore.playlistById(id)) {
+        return;
+    }
+    setActivePlaylistId(id);
+    setCurrentPage(3);
+}
+
+void AppController::playPlaylistRow(int row)
+{
+    if (row < 0 || row >= m_playlistTrackModel.rowCount()) {
+        return;
+    }
+
+    m_isOnlinePlayback = true;
+    m_pendingSearchRow = -1;
+    m_pendingPlaylistRow = row;
+    m_playlistTrackModel.setPlayingRow(row);
+    m_searchResultModel.setPlayingRow(-1);
+    m_playlistTrackModel.setSelectedRow(row);
+
+    const QVector<PlaylistTrackEntry>& entries = m_playlistTrackModel.entries();
+    const PlaylistTrackRef& ref = entries.at(row).ref;
+
+    if (!ref.localPath.isEmpty() && QFileInfo::exists(ref.localPath)) {
+        m_isOnlinePlayback = false;
+        m_pendingSearchRow = -1;
+        m_pendingPlaylistRow = -1;
+
+        int localRow = -1;
+        for (int i = 0; i < m_trackModel.rowCount(); ++i) {
+            if (m_trackModel.filePathAt(i) == ref.localPath) {
+                localRow = i;
+                break;
+            }
+        }
+        if (localRow >= 0) {
+            playRow(localRow);
+            return;
+        }
+
+        m_currentRow = -1;
+        m_currentFilePath = ref.localPath;
+        m_currentTitle = ref.title;
+        m_currentArtist = ref.artist.isEmpty() ? QStringLiteral("未知艺术家") : ref.artist;
+        m_currentCover = {};
+        m_hasCover = false;
+        if (!m_canControl) {
+            m_canControl = true;
+            emit canControlChanged();
+        }
+        m_audioPlayer.load(ref.localPath);
+        m_currentSubtitle = QStringLiteral("播放中");
+        emit nowPlayingChanged();
+        setStatus(QStringLiteral("播放中"));
+        m_audioPlayer.play();
+        return;
+    }
+
+    playOnlineTrackRef(ref, true);
+}
+
+void AppController::removePlaylistTrack(int row)
+{
+    if (row < 0 || row >= m_playlistTrackModel.rowCount()) {
+        return;
+    }
+    const QString songId = m_playlistTrackModel.songIdAt(row);
+    if (songId.isEmpty()) {
+        return;
+    }
+    m_playlistStore.removeTrack(m_activePlaylistId, songId);
+    reloadActivePlaylistModel();
 }

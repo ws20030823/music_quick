@@ -8,8 +8,10 @@
 // =============================================================================
 
 #include <QAbstractListModel>
+#include <QSet>
 #include <QVector>
 
+#include "app/PlaylistStore.h"
 #include "media/TrackMetadata.h"
 
 // 单首歌曲在列表中的一行数据
@@ -17,6 +19,7 @@ struct TrackEntry {
     QString filePath;
     TrackMetadata metadata;
     bool isPlaying = false;
+    bool isSelected = false;
 };
 
 class TrackListModel final : public QAbstractListModel
@@ -34,6 +37,9 @@ public:
         HasCoverRole,
         CoverRole,
         IsPlayingRole,
+        IsSelectedRole,
+        IsLikedRole,
+        FileSizeRole,
         RowIndexRole,
     };
 
@@ -51,9 +57,18 @@ public:
     void setPlayingRow(int row);
     int playingRow() const;
 
+    void setSelectedRow(int row);
+    int selectedRow() const;
+
+    void setLikedSongIds(const QSet<QString>& songIds);
+    void refreshLikedState(int row, bool liked);
+
     QString filePathAt(int row) const;
+    QString localSongIdAt(int row) const;
 
 private:
     QVector<TrackEntry> m_entries;
     int m_playingRow = -1;
+    int m_selectedRow = -1;
+    QSet<QString> m_likedSongIds;
 };
