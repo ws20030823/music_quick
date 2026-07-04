@@ -9,33 +9,64 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QFile>
+#include <QStandardPaths>
+#include <QTextStream>
 
 #include "app/AppController.h"
+#include "app/CoverImageProvider.h"
+
+namespace {
+
+void startupLog(const QString& message)
+{
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+        + QStringLiteral("/musicquick-startup.log");
+    QFile file(path);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        QTextStream stream(&file);
+        stream << message << '\n';
+    }
+}
+
+} // namespace
 
 int main(int argc, char* argv[])
 {
+    startupLog(QStringLiteral("main: enter"));
     QGuiApplication app(argc, argv);
+    startupLog(QStringLiteral("main: QGuiApplication created"));
     QGuiApplication::setOrganizationName(QStringLiteral("MusicQuick"));
     QGuiApplication::setApplicationName(QStringLiteral("MusicQuick"));
-    // 使用 Basic 风格，避免依赖系统原生控件主题
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    AppController controller;
-
     QQmlApplicationEngine engine;
-    // QML 全局对象：所有 .qml 文件可通过 app.xxx 访问业务逻辑
-    engine.rootContext()->setContextProperty(QStringLiteral("app"), &controller);
+    auto* controller = new AppController(&engine);
+    startupLog(QStringLiteral("main: AppController created"));
+
+    engine.addImageProvider(QStringLiteral("cover"), new CoverImageProvider(controller));
+    startupLog(QStringLiteral("main: image provider registered"));
+    engine.rootContext()->setContextProperty(QStringLiteral("app"), controller);
+    startupLog(QStringLiteral("main: context property set"));
     QObject::connect(
         &engine,
         &QQmlApplicationEngine::objectCreationFailed,
         &app,
-        []() { QCoreApplication::exit(-1); },
+        []() {
+            startupLog(QStringLiteral("main: objectCreationFailed"));
+            QCoreApplication::exit(-1);
+        },
         Qt::QueuedConnection);
     engine.loadFromModule(QStringLiteral("MusicQuick"), QStringLiteral("Main"));
+    startupLog(QStringLiteral("main: loadFromModule returned"));
 
     if (engine.rootObjects().isEmpty()) {
+        startupLog(QStringLiteral("main: rootObjects empty"));
         return -1;
     }
 
-    return app.exec();
+    startupLog(QStringLiteral("main: entering event loop"));
+    const int code = app.exec();
+    startupLog(QStringLiteral("main: event loop exited ") + QString::number(code));
+    return code;
 }

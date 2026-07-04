@@ -74,13 +74,14 @@ Item {
             Layout.fillHeight: true
             visible: app.activePlaylistTrackCount > 0
             model: app.playlistTrackModel
+            showRemoveFromPlaylist: true
+            removeFromPlaylistLabel: app.activePlaylistId === "liked"
+                                     ? qsTr("取消喜欢")
+                                     : qsTr("从歌单移除")
             onRowSelected: function(row) { app.selectPlaylistRow(row) }
             onRowActivated: function(row) { app.playPlaylistRow(row) }
-            onLikeClicked: function(row) {
-                if (app.activePlaylistId === "liked") {
-                    app.removePlaylistTrack(row)
-                }
-            }
+            onLikeClicked: function(row) { app.toggleLikePlaylistRow(row) }
+            onRemoveFromPlaylist: function(row) { app.removeTrackFromActivePlaylist(row) }
             onAddToPlaylist: function(row, playlistId) {
                 app.playPlaylistRow(row)
             }

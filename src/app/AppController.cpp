@@ -1,10 +1,14 @@
 #include "app/AppController.h"
 
 #include "media/TrackMetadataReader.h"
+#include "network/GequbaoClient.h"
+#include "network/MusicSourceClient.h"
+#include "network/MusicSourceRegistry.h"
 #include "network/MyFreeMp3Client.h"
+#include "network/OnlineSongId.h"
 #include "network/OnlineStreamLoader.h"
+#include "network/StreamFetchOptions.h"
 
-#include <QFileInfo>
 #include <QFileInfo>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -28,26 +32,77 @@ QString tooltipForMode(PlaybackDisplayMode mode)
     return QStringLiteral("顺序播放");
 }
 
+QString normalizedSongId(const QString& songId)
+{
+    return OnlineSongId::normalizeLegacySongId(songId);
+}
+
+bool songIdsMatch(const QString& a, const QString& b)
+{
+    return normalizedSongId(a) == normalizedSongId(b);
+}
+
+QString sourceIdFromSongId(const QString& songId)
+{
+    QString src;
+    if (OnlineSongId::parse(normalizedSongId(songId), &src, nullptr)) {
+        return src;
+    }
+    return {};
+}
+
+bool sourcesMatch(const QString& expectedSource, const QString& actualSource)
+{
+    if (expectedSource.isEmpty() || actualSource.isEmpty()) {
+        return true;
+    }
+    return expectedSource == actualSource;
+}
+
+QString effectiveSourceId(const QString& explicitSourceId, const QString& songId)
+{
+    if (!explicitSourceId.isEmpty()) {
+        return explicitSourceId;
+    }
+    return sourceIdFromSongId(songId);
+}
+
+QString registrySourceLabel(const MusicSourceRegistry& registry,
+                            const QString& explicitSourceId,
+                            const QString& songId)
+{
+    const QString src = effectiveSourceId(explicitSourceId, songId);
+    if (src.isEmpty()) {
+        return {};
+    }
+
+    const QString label = registry.displayName(src);
+    return label.isEmpty() ? src : label;
+}
+
 } // namespace
 
 // 构造函数：初始化音量、播放模式，并连接 AudioPlayer 信号到 QML 属性通知
 AppController::AppController(QObject* parent)
     : QObject(parent)
     , m_playbackController(this)
-    , m_myFreeMp3Client(new MyFreeMp3Client(this))
     , m_streamLoader(new OnlineStreamLoader(this))
 {
+    m_sourceRegistry.registerSource(new MyFreeMp3Client(this));
+    m_sourceRegistry.registerSource(new GequbaoClient(this));
+    m_musicSources = m_sourceRegistry.toVariantList();
+    connectAllSourceClients();
+
+    m_trackModel.setParent(this);
+    m_searchResultModel.setParent(this);
+    m_playlistTrackModel.setParent(this);
+    m_playlistStore.setParent(this);
+    m_audioPlayer.setParent(this);
+    m_coverNetwork.setParent(this);
+
     m_audioPlayer.setVolume(m_volume);
     updatePlaybackModeProperties();
 
-    connect(m_myFreeMp3Client, &MyFreeMp3Client::searchCompleted,
-            this, &AppController::onSearchCompleted);
-    connect(m_myFreeMp3Client, &MyFreeMp3Client::searchFailed,
-            this, &AppController::onSearchFailed);
-    connect(m_myFreeMp3Client, &MyFreeMp3Client::streamUrlResolved,
-            this, &AppController::onStreamUrlResolved);
-    connect(m_myFreeMp3Client, &MyFreeMp3Client::streamUrlFailed,
-            this, &AppController::onStreamUrlFailed);
     connect(m_streamLoader, &OnlineStreamLoader::prefetchReady,
             this, &AppController::onStreamPrefetchReady);
     connect(m_streamLoader, &OnlineStreamLoader::prefetchFailed,
@@ -72,9 +127,16 @@ AppController::AppController(QObject* parent)
     connect(&m_audioPlayer, &AudioPlayer::durationChanged, this, &AppController::durationChanged);
     connect(&m_audioPlayer, &AudioPlayer::positionChanged, this, &AppController::positionChanged);
 
-    // 一首播完：委托 PlaybackController 计算下一首
+    // 一首播完：本地列表或在线队列切歌
     connect(&m_audioPlayer, &AudioPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
-        if (status != QMediaPlayer::EndOfMedia || m_currentRow < 0) {
+        if (status != QMediaPlayer::EndOfMedia) {
+            return;
+        }
+        if (m_isOnlinePlayback) {
+            playOnlineNext();
+            return;
+        }
+        if (m_currentRow < 0) {
             return;
         }
         const PlaybackNavigateResult result = m_playbackController.navigateNext(m_currentRow);
@@ -84,6 +146,7 @@ AppController::AppController(QObject* parent)
     connect(&m_playlistStore, &PlaylistStore::playlistsChanged, this, [this]() {
         syncSearchLikedStates();
         syncLocalLikedStates();
+        syncPlaylistLikedStates();
         if (!m_activePlaylistId.isEmpty()) {
             reloadActivePlaylistModel();
         }
@@ -93,6 +156,7 @@ AppController::AppController(QObject* parent)
     m_activePlaylistId = QStringLiteral("liked");
     reloadActivePlaylistModel();
     syncLocalLikedStates();
+    syncPlaylistLikedStates();
 }
 
 AppController::~AppController() = default;
@@ -142,7 +206,44 @@ QString AppController::currentArtist() const { return m_currentArtist; }
 
 QString AppController::currentSubtitle() const { return m_currentSubtitle; }
 
+QString AppController::currentAlbum() const { return m_currentAlbum; }
+
+QString AppController::currentSource() const { return m_currentSource; }
+
+QString AppController::currentSongId() const { return m_currentSongId; }
+
+bool AppController::isOnlinePlayback() const { return m_isOnlinePlayback; }
+
+bool AppController::isCurrentTrackLiked() const
+{
+    if (m_currentSongId.isEmpty()) {
+        return false;
+    }
+    return m_playlistStore.containsTrack(QStringLiteral("liked"), m_currentSongId);
+}
+
+bool AppController::nowPlayingVisible() const { return m_nowPlayingVisible; }
+
+void AppController::setNowPlayingVisible(bool visible)
+{
+    if (m_nowPlayingVisible == visible) {
+        return;
+    }
+    m_nowPlayingVisible = visible;
+    emit nowPlayingVisibleChanged();
+}
+
+void AppController::updateCurrentLikeState()
+{
+    emit currentLikeChanged();
+}
+
 bool AppController::hasCover() const { return m_hasCover; }
+
+QString AppController::currentCoverUrl() const
+{
+    return m_hasCover ? QStringLiteral("image://cover/current") : QString();
+}
 
 QImage AppController::currentCover() const { return m_currentCover; }
 
@@ -233,6 +334,61 @@ int AppController::likedTrackCount() const
     return m_playlistStore.trackCount(QStringLiteral("liked"));
 }
 
+QString AppController::activeMusicSourceId() const
+{
+    return m_activeMusicSourceId;
+}
+
+void AppController::setActiveMusicSourceId(const QString& id)
+{
+    if (m_activeMusicSourceId == id || id.isEmpty()) {
+        return;
+    }
+    if (!m_sourceRegistry.source(id)) {
+        return;
+    }
+
+    m_activeMusicSourceId = id;
+    m_searchResultModel.setResults({});
+    m_searchCurrentPage = 1;
+    m_searchHasNext = false;
+    m_searchHasPrevious = false;
+    emit searchPaginationChanged();
+    emit searchResultCountChanged();
+    setSearchStatus(QStringLiteral("已切换至「%1」，请输入关键词搜索")
+                        .arg(m_sourceRegistry.displayName(id)));
+    emit activeMusicSourceChanged();
+}
+
+QString AppController::activeMusicSourceName() const
+{
+    return m_sourceRegistry.displayName(m_activeMusicSourceId);
+}
+
+QVariantList AppController::musicSources() const
+{
+    return m_musicSources;
+}
+
+void AppController::connectAllSourceClients()
+{
+    for (const QString& sourceId : m_sourceRegistry.sourceIds()) {
+        MusicSourceClient* client = m_sourceRegistry.source(sourceId);
+        if (!client) {
+            continue;
+        }
+
+        connect(client, &MusicSourceClient::searchCompleted,
+                this, &AppController::onSearchCompleted);
+        connect(client, &MusicSourceClient::searchFailed,
+                this, &AppController::onSearchFailed);
+        connect(client, &MusicSourceClient::streamUrlResolved,
+                this, &AppController::onStreamUrlResolved);
+        connect(client, &MusicSourceClient::streamUrlFailed,
+                this, &AppController::onStreamUrlFailed);
+    }
+}
+
 void AppController::setSearchBusy(bool busy)
 {
     if (m_searchBusy == busy) {
@@ -265,7 +421,12 @@ void AppController::searchOnline(const QString& keyword, int page)
 
     setSearchBusy(true);
     setSearchStatus(QStringLiteral("搜索中…"));
-    m_myFreeMp3Client->search(trimmed, page);
+    if (MusicSourceClient* client = m_sourceRegistry.source(m_activeMusicSourceId)) {
+        client->search(trimmed, page);
+    } else {
+        setSearchBusy(false);
+        setSearchStatus(QStringLiteral("未找到音乐来源「%1」").arg(m_activeMusicSourceId));
+    }
 }
 
 void AppController::searchNextPage()
@@ -291,6 +452,11 @@ void AppController::applySearchPageResult(const SearchPageResult& result)
     for (const OnlineTrack& track : result.tracks) {
         SearchResultEntry entry;
         entry.songId = track.songId;
+        entry.sourceId = track.sourceId.isEmpty()
+            ? m_activeMusicSourceId
+            : track.sourceId;
+        entry.sourceLabel = m_sourceRegistry.displayName(entry.sourceId);
+        entry.detailUrl = track.detailUrl;
         entry.streamUrl = track.streamUrl;
         entry.coverUrl = track.coverUrl;
         entry.metadata.title = track.title.isEmpty() ? track.displayTitle : track.title;
@@ -312,6 +478,13 @@ void AppController::applySearchPageResult(const SearchPageResult& result)
 void AppController::onSearchCompleted(const SearchPageResult& result, const QString& keyword)
 {
     Q_UNUSED(keyword);
+
+    if (MusicSourceClient* client = qobject_cast<MusicSourceClient*>(sender())) {
+        if (client->sourceId() != m_activeMusicSourceId) {
+            return;
+        }
+    }
+
     applySearchPageResult(result);
     setSearchBusy(false);
 
@@ -326,6 +499,12 @@ void AppController::onSearchCompleted(const SearchPageResult& result, const QStr
 
 void AppController::onSearchFailed(const QString& message)
 {
+    if (MusicSourceClient* client = qobject_cast<MusicSourceClient*>(sender())) {
+        if (client->sourceId() != m_activeMusicSourceId) {
+            return;
+        }
+    }
+
     setSearchBusy(false);
     setSearchStatus(QStringLiteral("搜索失败：%1").arg(message));
 }
@@ -338,8 +517,14 @@ void AppController::playSearchRow(int row)
     }
 
     m_isOnlinePlayback = true;
+    m_onlineQueueType = OnlineQueueType::Search;
+    m_onlineQueueRow = row;
     m_pendingSearchRow = row;
     m_pendingPlaylistRow = -1;
+    if (!m_canControl) {
+        m_canControl = true;
+        emit canControlChanged();
+    }
     m_searchResultModel.setPlayingRow(row);
     m_searchResultModel.setSelectedRow(row);
     m_playlistTrackModel.setPlayingRow(-1);
@@ -350,6 +535,12 @@ void AppController::playSearchRow(int row)
     m_currentArtist = entry.metadata.artist.isEmpty()
         ? QStringLiteral("在线音乐")
         : entry.metadata.artist;
+    m_currentAlbum = entry.metadata.album.isEmpty()
+        ? QStringLiteral("未知专辑")
+        : entry.metadata.album;
+    m_currentSource = registrySourceLabel(m_sourceRegistry, entry.sourceId, entry.songId);
+    m_currentSongId = entry.songId;
+    m_currentLocalPath.clear();
 
     const QString cachedUrl = entry.streamUrl;
     if (!cachedUrl.isEmpty()) {
@@ -359,7 +550,15 @@ void AppController::playSearchRow(int row)
 
     setSearchBusy(true);
     setSearchStatus(QStringLiteral("正在获取播放地址…"));
-    m_myFreeMp3Client->resolveStreamUrl(entry.songId);
+    const QString src = effectiveSourceId(entry.sourceId, entry.songId);
+    if (MusicSourceClient* client = m_sourceRegistry.source(src)) {
+        client->resolveStreamUrl(entry.songId,
+                                 QUrl(entry.detailUrl),
+                                 entry.metadata.title,
+                                 entry.metadata.artist);
+    } else {
+        handleOnlinePlaybackFailure(QStringLiteral("未找到音乐来源「%1」").arg(src));
+    }
 }
 
 void AppController::onStreamUrlResolved(const OnlineTrack& track)
@@ -367,6 +566,19 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
     setSearchBusy(false);
 
     if (m_pendingSearchRow >= 0) {
+        if (!isPendingOnlineSearchRow(m_pendingSearchRow)) {
+            return;
+        }
+
+        const SearchResultEntry& entry = m_searchResultModel.entries().at(m_pendingSearchRow);
+        if (!songIdsMatch(entry.songId, track.songId)) {
+            return;
+        }
+        if (!sourcesMatch(effectiveSourceId(entry.sourceId, entry.songId),
+                          effectiveSourceId(track.sourceId, track.songId))) {
+            return;
+        }
+
         m_searchResultModel.updateStreamUrl(m_pendingSearchRow, track.streamUrl, track.coverUrl);
         const QString songId = m_searchResultModel.songIdAt(m_pendingSearchRow);
         m_playlistStore.updateTrackStreamUrl(songId, track.streamUrl, track.coverUrl);
@@ -387,6 +599,19 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
     }
 
     if (m_pendingPlaylistRow >= 0) {
+        if (!isPendingOnlinePlaylistRow(m_pendingPlaylistRow)) {
+            return;
+        }
+
+        const PlaylistTrackRef& ref = m_playlistTrackModel.entries().at(m_pendingPlaylistRow).ref;
+        if (!songIdsMatch(ref.songId, track.songId)) {
+            return;
+        }
+        if (!sourcesMatch(effectiveSourceId(ref.sourceId, ref.songId),
+                          effectiveSourceId(track.sourceId, track.songId))) {
+            return;
+        }
+
         const QString title = track.title.isEmpty() ? track.displayTitle : track.title;
         const QString artist = track.artist.isEmpty() ? QStringLiteral("在线音乐") : track.artist;
         setSearchStatus(QStringLiteral("正在播放…"));
@@ -396,9 +621,35 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
 
 void AppController::onStreamUrlFailed(const QString& songId, const QString& message)
 {
-    Q_UNUSED(songId);
-    setSearchBusy(false);
-    setSearchStatus(QStringLiteral("无法播放：%1").arg(message));
+    if (m_pendingSearchRow >= 0) {
+        if (!isPendingOnlineSearchRow(m_pendingSearchRow)) {
+            return;
+        }
+        const SearchResultEntry& entry = m_searchResultModel.entries().at(m_pendingSearchRow);
+        if (!songIdsMatch(entry.songId, songId)) {
+            return;
+        }
+        if (!sourcesMatch(effectiveSourceId(entry.sourceId, entry.songId),
+                          sourceIdFromSongId(songId))) {
+            return;
+        }
+    } else if (m_pendingPlaylistRow >= 0) {
+        if (!isPendingOnlinePlaylistRow(m_pendingPlaylistRow)) {
+            return;
+        }
+        const PlaylistTrackRef& ref = m_playlistTrackModel.entries().at(m_pendingPlaylistRow).ref;
+        if (!songIdsMatch(ref.songId, songId)) {
+            return;
+        }
+        if (!sourcesMatch(effectiveSourceId(ref.sourceId, ref.songId),
+                          sourceIdFromSongId(songId))) {
+            return;
+        }
+    } else {
+        return;
+    }
+
+    handleOnlinePlaybackFailure(QStringLiteral("解析失败：%1").arg(message));
 }
 
 void AppController::downloadSearchCover(int row, const QUrl& coverUrl)
@@ -440,6 +691,18 @@ void AppController::loadOnlineStream(const QString& streamUrl,
         return;
     }
 
+    for (const QString& sourceId : m_sourceRegistry.sourceIds()) {
+        if (MusicSourceClient* client = m_sourceRegistry.source(sourceId)) {
+            client->cancelResolveStreamUrl();
+        }
+    }
+
+    const QString streamSourceId = effectiveSourceId(QString(), m_currentSongId);
+    if (MusicSourceClient* client = m_sourceRegistry.source(
+            streamSourceId.isEmpty() ? m_activeMusicSourceId : streamSourceId)) {
+        m_currentStreamFetchOptions = client->streamFetchOptions();
+    }
+
     // CDN 拒绝无 Referer 的直接串流（403），先预取到本地缓存再交给 QMediaPlayer
     m_isOnlinePlayback = true;
     m_currentRow = -1;
@@ -449,6 +712,7 @@ void AppController::loadOnlineStream(const QString& streamUrl,
     m_currentCover = cover;
     m_hasCover = !cover.isNull();
     m_pendingStreamAutoPlay = autoPlay;
+    m_pendingStreamUrl = streamUrl;
 
     if (!m_canControl) {
         m_canControl = true;
@@ -460,12 +724,14 @@ void AppController::loadOnlineStream(const QString& streamUrl,
     setStatus(QStringLiteral("正在缓冲在线音频…"));
     setSearchStatus(QStringLiteral("正在缓冲…"));
 
-    m_streamLoader->prefetch(QUrl(streamUrl));
+    m_streamLoader->prefetch(QUrl(streamUrl), m_currentStreamFetchOptions);
 }
 
 void AppController::onStreamPrefetchReady(const QString& localFilePath, const QUrl& originalUrl)
 {
-    Q_UNUSED(originalUrl);
+    if (m_pendingStreamUrl.isEmpty() || originalUrl.toString() != m_pendingStreamUrl) {
+        return;
+    }
 
     m_currentFilePath = localFilePath;
     m_audioPlayer.load(localFilePath);
@@ -484,11 +750,50 @@ void AppController::onStreamPrefetchReady(const QString& localFilePath, const QU
 
 void AppController::onStreamPrefetchFailed(const QUrl& originalUrl, const QString& message)
 {
-    Q_UNUSED(originalUrl);
-    setSearchStatus(QStringLiteral("缓冲失败：%1").arg(message));
-    setStatus(QStringLiteral("播放失败：%1").arg(message));
-    m_currentSubtitle = QStringLiteral("播放失败");
+    if (m_pendingStreamUrl.isEmpty() || originalUrl.toString() != m_pendingStreamUrl) {
+        return;
+    }
+
+    handleOnlinePlaybackFailure(QStringLiteral("缓冲失败：%1").arg(message));
+}
+
+void AppController::handleOnlinePlaybackFailure(const QString& message)
+{
+    cancelPendingOnlineRequests();
+    setSearchBusy(false);
+    setSearchStatus(message);
+    setStatus(message);
+    m_currentSubtitle = QStringLiteral("解析失败");
+    m_pendingSearchRow = -1;
+    m_pendingPlaylistRow = -1;
+    if (!m_canControl && m_onlineQueueType != OnlineQueueType::None) {
+        m_canControl = true;
+        emit canControlChanged();
+    }
     emit nowPlayingChanged();
+}
+
+void AppController::cancelPendingOnlineRequests()
+{
+    m_pendingStreamUrl.clear();
+    if (m_streamLoader) {
+        m_streamLoader->cancelActivePrefetch();
+    }
+    for (const QString& sourceId : m_sourceRegistry.sourceIds()) {
+        if (MusicSourceClient* client = m_sourceRegistry.source(sourceId)) {
+            client->cancelResolveStreamUrl();
+        }
+    }
+}
+
+bool AppController::isPendingOnlineSearchRow(int row) const
+{
+    return m_onlineQueueType == OnlineQueueType::Search && m_onlineQueueRow == row;
+}
+
+bool AppController::isPendingOnlinePlaylistRow(int row) const
+{
+    return m_onlineQueueType == OnlineQueueType::Playlist && m_onlineQueueRow == row;
 }
 
 // 多选导入：逐首读取元数据，默认加载第一首但不自动播放
@@ -546,7 +851,9 @@ void AppController::playRow(int row)
         return;
     }
 
+    cancelPendingOnlineRequests();
     m_isOnlinePlayback = false;
+    m_onlineQueueType = OnlineQueueType::None;
     m_pendingSearchRow = -1;
     m_pendingPlaylistRow = -1;
     m_searchResultModel.setPlayingRow(-1);
@@ -646,6 +953,10 @@ void AppController::syncLocalLikedStates()
 
 void AppController::playNext()
 {
+    if (m_onlineQueueType != OnlineQueueType::None) {
+        playOnlineNext();
+        return;
+    }
     if (m_currentRow < 0) {
         return;
     }
@@ -656,12 +967,58 @@ void AppController::playNext()
 
 void AppController::playPrevious()
 {
+    if (m_onlineQueueType != OnlineQueueType::None) {
+        playOnlinePrevious();
+        return;
+    }
     if (m_currentRow < 0) {
         return;
     }
 
     const PlaybackNavigateResult result = m_playbackController.navigatePrevious(m_currentRow);
     applyNavigateResult(result, m_currentRow);
+}
+
+void AppController::playOnlineNext()
+{
+    if (m_onlineQueueType == OnlineQueueType::Search) {
+        const int next = m_onlineQueueRow + 1;
+        if (next < m_searchResultModel.rowCount()) {
+            playSearchRow(next);
+        } else {
+            setStatus(QStringLiteral("已是最后一首"));
+        }
+        return;
+    }
+    if (m_onlineQueueType == OnlineQueueType::Playlist) {
+        const int next = m_onlineQueueRow + 1;
+        if (next < m_playlistTrackModel.rowCount()) {
+            playPlaylistRow(next);
+        } else {
+            setStatus(QStringLiteral("已是最后一首"));
+        }
+    }
+}
+
+void AppController::playOnlinePrevious()
+{
+    if (m_onlineQueueType == OnlineQueueType::Search) {
+        const int prev = m_onlineQueueRow - 1;
+        if (prev >= 0) {
+            playSearchRow(prev);
+        } else {
+            setStatus(QStringLiteral("已是第一首"));
+        }
+        return;
+    }
+    if (m_onlineQueueType == OnlineQueueType::Playlist) {
+        const int prev = m_onlineQueueRow - 1;
+        if (prev >= 0) {
+            playPlaylistRow(prev);
+        } else {
+            setStatus(QStringLiteral("已是第一首"));
+        }
+    }
 }
 
 // 顺序 → 随机 → 列表循环 → 单曲循环，并重建随机序
@@ -723,14 +1080,24 @@ void AppController::loadTrack(int row, bool autoPlay)
         const TrackEntry& entry = entries.at(row);
         m_currentTitle = entry.metadata.title;
         m_currentArtist = entry.metadata.artist;
+        m_currentAlbum = entry.metadata.album.isEmpty()
+            ? QStringLiteral("未知专辑")
+            : entry.metadata.album;
         m_currentCover = entry.metadata.cover;
         m_hasCover = !entry.metadata.cover.isNull();
+        m_currentSource = QStringLiteral("本地音乐");
+        m_currentSongId = PlaylistStore::localSongId(path);
+        m_currentLocalPath = path;
     } else {
         const QFileInfo info(path);
         m_currentTitle = info.fileName();
         m_currentArtist = QStringLiteral("未知艺术家");
+        m_currentAlbum = QStringLiteral("未知专辑");
         m_currentCover = {};
         m_hasCover = false;
+        m_currentSource = QStringLiteral("本地音乐");
+        m_currentSongId = PlaylistStore::localSongId(path);
+        m_currentLocalPath = path;
     }
 
     if (!m_canControl) {
@@ -740,6 +1107,7 @@ void AppController::loadTrack(int row, bool autoPlay)
 
     m_currentSubtitle = autoPlay ? QStringLiteral("播放中") : QStringLiteral("已加载");
     emit nowPlayingChanged();
+    updateCurrentLikeState();
     setStatus(autoPlay ? QStringLiteral("播放中") : QStringLiteral("已加载文件"));
 
     if (autoPlay) {
@@ -758,11 +1126,8 @@ void AppController::applyNavigateResult(const PlaybackNavigateResult& result, in
 {
     Q_UNUSED(currentRow);
 
-    // 在线播放模式不接入本地列表的上一首/下一首
+    // 在线播放模式：EndOfMedia 已在 mediaStatusChanged 中处理
     if (m_isOnlinePlayback) {
-        setStatus(QStringLiteral("播放完成"));
-        m_currentSubtitle = QStringLiteral("播放完成");
-        emit nowPlayingChanged();
         return;
     }
 
@@ -811,6 +1176,18 @@ void AppController::syncSearchLikedStates()
     m_searchResultModel.setLikedSongIds(likedIds);
 }
 
+void AppController::syncPlaylistLikedStates()
+{
+    QSet<QString> likedIds;
+    const PlaylistInfo* liked = m_playlistStore.playlistById(QStringLiteral("liked"));
+    if (liked) {
+        for (const PlaylistTrackRef& track : liked->tracks) {
+            likedIds.insert(track.songId);
+        }
+    }
+    m_playlistTrackModel.setLikedSongIds(likedIds);
+}
+
 void AppController::reloadActivePlaylistModel()
 {
     if (m_activePlaylistId.isEmpty()) {
@@ -836,6 +1213,7 @@ void AppController::reloadActivePlaylistModel()
         entries.append(entry);
     }
     m_playlistTrackModel.setTracks(std::move(entries));
+    syncPlaylistLikedStates();
     emit activePlaylistContentChanged();
 }
 
@@ -852,9 +1230,17 @@ PlaylistTrackRef AppController::trackRefFromSearchRow(int row) const
     }
     const SearchResultEntry& entry = m_searchResultModel.entries().at(row);
     ref.songId = entry.songId;
+    ref.sourceId = entry.sourceId;
+    if (ref.sourceId.isEmpty()) {
+        QString src;
+        if (OnlineSongId::parse(ref.songId, &src, nullptr)) {
+            ref.sourceId = src;
+        }
+    }
     ref.title = entry.metadata.title;
     ref.artist = entry.metadata.artist;
     ref.album = entry.metadata.album;
+    ref.detailUrl = entry.detailUrl;
     ref.streamUrl = entry.streamUrl;
     ref.coverUrl = entry.coverUrl;
     return ref;
@@ -866,6 +1252,8 @@ void AppController::playOnlineTrackRef(const PlaylistTrackRef& track, bool autoP
     m_currentRow = -1;
     m_currentTitle = track.title;
     m_currentArtist = track.artist.isEmpty() ? QStringLiteral("在线音乐") : track.artist;
+    m_currentSongId = track.songId;
+    m_currentSource = registrySourceLabel(m_sourceRegistry, track.sourceId, track.songId);
 
     if (!track.streamUrl.isEmpty()) {
         loadOnlineStream(track.streamUrl, m_currentTitle, m_currentArtist, {}, autoPlay);
@@ -874,7 +1262,15 @@ void AppController::playOnlineTrackRef(const PlaylistTrackRef& track, bool autoP
 
     setSearchBusy(true);
     setSearchStatus(QStringLiteral("正在获取播放地址…"));
-    m_myFreeMp3Client->resolveStreamUrl(track.songId);
+    const QString src = effectiveSourceId(track.sourceId, track.songId);
+    if (MusicSourceClient* client = m_sourceRegistry.source(src)) {
+        client->resolveStreamUrl(track.songId,
+                                 QUrl(track.detailUrl),
+                                 track.title,
+                                 track.artist);
+    } else {
+        handleOnlinePlaybackFailure(QStringLiteral("未找到音乐来源「%1」").arg(src));
+    }
 }
 
 void AppController::playAllSearchResults()
@@ -923,12 +1319,16 @@ void AppController::toggleLikeSearchRow(int row)
     if (liked) {
         m_playlistStore.removeTrack(QStringLiteral("liked"), ref.songId);
         m_searchResultModel.refreshLikedState(row, false);
-        setSearchStatus(QStringLiteral("已从「我喜欢的音乐」移除"));
+        syncPlaylistLikedStates();
+        syncLocalLikedStates();
+        setSearchStatus(QStringLiteral("已取消喜欢"));
         return;
     }
 
     if (m_playlistStore.addTrack(QStringLiteral("liked"), ref)) {
         m_searchResultModel.refreshLikedState(row, true);
+        syncPlaylistLikedStates();
+        syncLocalLikedStates();
         setSearchStatus(QStringLiteral("已加入「我喜欢的音乐」"));
     }
 }
@@ -993,16 +1393,29 @@ void AppController::playPlaylistRow(int row)
     }
 
     m_isOnlinePlayback = true;
+    m_onlineQueueType = OnlineQueueType::Playlist;
+    m_onlineQueueRow = row;
     m_pendingSearchRow = -1;
     m_pendingPlaylistRow = row;
+    if (!m_canControl) {
+        m_canControl = true;
+        emit canControlChanged();
+    }
     m_playlistTrackModel.setPlayingRow(row);
     m_searchResultModel.setPlayingRow(-1);
     m_playlistTrackModel.setSelectedRow(row);
 
     const QVector<PlaylistTrackEntry>& entries = m_playlistTrackModel.entries();
     const PlaylistTrackRef& ref = entries.at(row).ref;
+    m_currentAlbum = ref.album.isEmpty() ? QStringLiteral("未知专辑") : ref.album;
+    m_currentSource = ref.localPath.isEmpty()
+        ? registrySourceLabel(m_sourceRegistry, ref.sourceId, ref.songId)
+        : QStringLiteral("本地音乐");
+    m_currentSongId = ref.songId;
+    m_currentLocalPath = ref.localPath;
 
     if (!ref.localPath.isEmpty() && QFileInfo::exists(ref.localPath)) {
+        cancelPendingOnlineRequests();
         m_isOnlinePlayback = false;
         m_pendingSearchRow = -1;
         m_pendingPlaylistRow = -1;
@@ -1016,6 +1429,14 @@ void AppController::playPlaylistRow(int row)
         }
         if (localRow >= 0) {
             playRow(localRow);
+            m_onlineQueueType = OnlineQueueType::Playlist;
+            m_onlineQueueRow = row;
+            m_currentAlbum = ref.album.isEmpty() ? QStringLiteral("未知专辑") : ref.album;
+            m_currentSource = QStringLiteral("本地音乐");
+            m_currentSongId = ref.songId;
+            m_currentLocalPath = ref.localPath;
+            emit nowPlayingChanged();
+            updateCurrentLikeState();
             return;
         }
 
@@ -1025,6 +1446,10 @@ void AppController::playPlaylistRow(int row)
         m_currentArtist = ref.artist.isEmpty() ? QStringLiteral("未知艺术家") : ref.artist;
         m_currentCover = {};
         m_hasCover = false;
+        m_currentAlbum = ref.album.isEmpty() ? QStringLiteral("未知专辑") : ref.album;
+        m_currentSource = QStringLiteral("本地音乐");
+        m_currentSongId = ref.songId;
+        m_currentLocalPath = ref.localPath;
         if (!m_canControl) {
             m_canControl = true;
             emit canControlChanged();
@@ -1032,6 +1457,7 @@ void AppController::playPlaylistRow(int row)
         m_audioPlayer.load(ref.localPath);
         m_currentSubtitle = QStringLiteral("播放中");
         emit nowPlayingChanged();
+        updateCurrentLikeState();
         setStatus(QStringLiteral("播放中"));
         m_audioPlayer.play();
         return;
@@ -1049,6 +1475,102 @@ void AppController::removePlaylistTrack(int row)
     if (songId.isEmpty()) {
         return;
     }
-    m_playlistStore.removeTrack(m_activePlaylistId, songId);
+    if (!m_playlistStore.removeTrack(m_activePlaylistId, songId)) {
+        return;
+    }
     reloadActivePlaylistModel();
+    syncSearchLikedStates();
+    syncLocalLikedStates();
+    setStatus(QStringLiteral("已从歌单移除"));
+}
+
+void AppController::removeTrackFromActivePlaylist(int row)
+{
+    if (m_activePlaylistId == QStringLiteral("liked")) {
+        toggleLikePlaylistRow(row);
+        return;
+    }
+    removePlaylistTrack(row);
+}
+
+PlaylistTrackRef AppController::trackRefFromPlaylistRow(int row) const
+{
+    PlaylistTrackRef ref;
+    if (row < 0 || row >= m_playlistTrackModel.rowCount()) {
+        return ref;
+    }
+    ref = m_playlistTrackModel.entries().at(row).ref;
+    if (ref.sourceId.isEmpty()) {
+        QString src;
+        if (OnlineSongId::parse(ref.songId, &src, nullptr)) {
+            ref.sourceId = src;
+        }
+    }
+    return ref;
+}
+
+bool AppController::isPlaylistRowLiked(int row) const
+{
+    const PlaylistTrackRef ref = trackRefFromPlaylistRow(row);
+    if (ref.songId.isEmpty()) {
+        return false;
+    }
+    return m_playlistStore.containsTrack(QStringLiteral("liked"), ref.songId);
+}
+
+void AppController::toggleLikePlaylistRow(int row)
+{
+    const PlaylistTrackRef ref = trackRefFromPlaylistRow(row);
+    if (ref.songId.isEmpty()) {
+        return;
+    }
+
+    const bool liked = m_playlistStore.containsTrack(QStringLiteral("liked"), ref.songId);
+    if (liked) {
+        m_playlistStore.removeTrack(QStringLiteral("liked"), ref.songId);
+        syncSearchLikedStates();
+        syncLocalLikedStates();
+        if (m_activePlaylistId == QStringLiteral("liked")) {
+            reloadActivePlaylistModel();
+        } else {
+            m_playlistTrackModel.refreshLikedState(row, false);
+        }
+        setStatus(QStringLiteral("已取消喜欢"));
+        return;
+    }
+
+    if (m_playlistStore.addTrack(QStringLiteral("liked"), ref)) {
+        syncSearchLikedStates();
+        syncLocalLikedStates();
+        m_playlistTrackModel.refreshLikedState(row, true);
+        setStatus(QStringLiteral("已加入「我喜欢的音乐」"));
+    }
+}
+
+void AppController::toggleCurrentLike()
+{
+    if (m_currentSongId.isEmpty()) {
+        return;
+    }
+
+    PlaylistTrackRef ref;
+    ref.songId = m_currentSongId;
+    ref.title = m_currentTitle;
+    ref.artist = m_currentArtist;
+    ref.album = m_currentAlbum;
+    ref.localPath = m_currentLocalPath;
+
+    if (isCurrentTrackLiked()) {
+        m_playlistStore.removeTrack(QStringLiteral("liked"), m_currentSongId);
+        setStatus(QStringLiteral("已取消喜欢"));
+    } else if (m_playlistStore.addTrack(QStringLiteral("liked"), ref)) {
+        setStatus(QStringLiteral("已加入「我喜欢的音乐」"));
+    } else {
+        return;
+    }
+
+    syncSearchLikedStates();
+    syncLocalLikedStates();
+    syncPlaylistLikedStates();
+    emit currentLikeChanged();
 }

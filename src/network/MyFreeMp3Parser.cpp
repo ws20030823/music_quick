@@ -1,6 +1,14 @@
 #include "network/MyFreeMp3Parser.h"
 
+#include "network/OnlineSongId.h"
+
 #include <QRegularExpression>
+
+namespace {
+
+constexpr auto kSourceId = "myfreemp3";
+
+} // namespace
 
 namespace {
 
@@ -37,11 +45,13 @@ SearchPageResult parseSearchResultsHtml(const QString& html)
     QRegularExpressionMatchIterator it = trackRe.globalMatch(html);
     while (it.hasNext()) {
         const QRegularExpressionMatch match = it.next();
+        const QString numericId = match.captured(1);
         OnlineTrack track;
-        track.songId = match.captured(1);
+        track.sourceId = QString::fromLatin1(kSourceId);
+        track.songId = OnlineSongId::compose(track.sourceId, numericId);
         const QString rawTitle = match.captured(2).section(QStringLiteral(" MP3"), 0, 0).trimmed();
         track.displayTitle = stripHtmlTags(rawTitle);
-        track.detailUrl = QStringLiteral("https://myfreemp3online.com/song/%1.html").arg(track.songId);
+        track.detailUrl = QStringLiteral("https://myfreemp3online.com/song/%1.html").arg(numericId);
         splitArtistTitle(track);
         result.tracks.append(track);
     }
@@ -69,9 +79,15 @@ SearchPageResult parseSearchResultsHtml(const QString& html)
 
 OnlineTrack parseSongDetailHtml(const QString& html, const QString& songId)
 {
+    QString bareTrackId;
+    if (!OnlineSongId::parse(songId, nullptr, &bareTrackId)) {
+        bareTrackId = songId;
+    }
+
     OnlineTrack track;
-    track.songId = songId;
-    track.detailUrl = QStringLiteral("https://myfreemp3online.com/song/%1.html").arg(songId);
+    track.sourceId = QString::fromLatin1(kSourceId);
+    track.songId = OnlineSongId::compose(track.sourceId, bareTrackId);
+    track.detailUrl = QStringLiteral("https://myfreemp3online.com/song/%1.html").arg(bareTrackId);
 
     static const QRegularExpression streamUrlRe(QStringLiteral(R"(url:\s*'([^']+)')"));
     const QRegularExpressionMatch urlMatch = streamUrlRe.match(html);

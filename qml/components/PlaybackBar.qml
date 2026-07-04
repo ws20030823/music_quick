@@ -163,19 +163,25 @@ Rectangle {
 
 
 
-        RowLayout {
-
+        Item {
+            id: trackInfoHost
             Layout.preferredWidth: 280
-
             Layout.maximumWidth: 320
-
             Layout.fillHeight: true
-
             Layout.alignment: Qt.AlignVCenter
 
-            spacing: 12
+            MouseArea {
+                anchors.fill: parent
+                enabled: app.canControl && app.currentTitle.length > 0
+                hoverEnabled: true
+                cursorShape: containsMouse ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: app.nowPlayingVisible = true
+            }
 
-
+            RowLayout {
+                id: trackInfoSection
+                anchors.fill: parent
+                spacing: 12
 
             Rectangle {
 
@@ -195,7 +201,9 @@ Rectangle {
 
                     anchors.fill: parent
 
-                    source: app.hasCover ? app.currentCover : ""
+                    source: app.currentCoverUrl
+
+                    cache: false
 
                     fillMode: Image.PreserveAspectCrop
 
@@ -258,6 +266,8 @@ Rectangle {
                     Layout.fillWidth: true
 
                 }
+
+            }
 
             }
 
@@ -464,7 +474,14 @@ Rectangle {
 
                 Layout.preferredHeight: 36
 
-
+                WheelHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: function(event) {
+                        var step = event.angleDelta.y > 0 ? 3 : -3
+                        app.volume = Math.max(0, Math.min(100, app.volume + step))
+                        event.accepted = true
+                    }
+                }
 
                 IconTransportButton {
 
@@ -544,10 +561,20 @@ Rectangle {
                             Layout.preferredHeight: 80
                             orientation: Qt.Vertical
                             interactive: true
-                            from: 100
-                            to: 0
+                            from: 0
+                            to: 100
                             value: app.volume
                             live: true
+                            WheelHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: function(event) {
+                                    var step = event.angleDelta.y > 0 ? 3 : -3
+                                    volumeSlider.value = Math.max(volumeSlider.from,
+                                        Math.min(volumeSlider.to, volumeSlider.value + step))
+                                    app.volume = Math.round(volumeSlider.value)
+                                    event.accepted = true
+                                }
+                            }
                             onValueChanged: {
                                 if (pressed)
                                     app.volume = Math.round(value)

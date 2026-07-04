@@ -44,7 +44,7 @@ QVariant SearchResultModel::data(const QModelIndex& index, int role) const
     case StreamUrlRole:
         return entry.streamUrl;
     case SourceLabelRole:
-        return QStringLiteral("MyFreeMp3");
+        return entry.sourceLabel;
     case IsLikedRole:
         return m_likedSongIds.contains(entry.songId);
     case IsSelectedRole:

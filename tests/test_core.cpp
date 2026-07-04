@@ -12,6 +12,9 @@
 #include "core/PlaybackController.h"
 #include "core/PlaybackMode.h"
 #include "media/TrackMetadataReader.h"
+#include "test_music_source_ids.h"
+#include "test_gequbao_parser.h"
+#include "test_curl_http_client.h"
 
 // AudioPlayer：构造、音量、加载、toggle 等基础行为
 class TestAudioPlayer final : public QObject
@@ -239,6 +242,18 @@ int main(int argc, char* argv[])
     {
         TestTrackMetadataReader trackMetadataReaderTests;
         status |= QTest::qExec(&trackMetadataReaderTests, argc, argv);
+    }
+    {
+        MusicSourceIdsTest musicSourceIdsTests;
+        status |= QTest::qExec(&musicSourceIdsTests, argc, argv);
+    }
+    {
+        GequbaoParserTest gequbaoParserTests;
+        status |= QTest::qExec(&gequbaoParserTests, argc, argv);
+    }
+    {
+        CurlHttpClientTest curlHttpClientTests;
+        status |= QTest::qExec(&curlHttpClientTests, argc, argv);
     }
 
     return status;

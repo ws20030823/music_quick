@@ -6,9 +6,11 @@
 
 struct PlaylistTrackRef {
     QString songId;
+    QString sourceId;
     QString title;
     QString artist;
     QString album;
+    QString detailUrl;
     QString streamUrl;
     QString coverUrl;
     QString localPath;

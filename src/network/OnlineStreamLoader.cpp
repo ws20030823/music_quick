@@ -12,8 +12,7 @@
 
 namespace {
 
-constexpr auto kReferer = "https://myfreemp3online.com/";
-constexpr auto kUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MusicQuick/1.0";
+constexpr auto kDefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MusicQuick/1.0";
 
 QString extensionFromUrl(const QUrl& url)
 {
@@ -48,7 +47,19 @@ QString OnlineStreamLoader::cacheFilePathFor(const QUrl& streamUrl) const
     return base + QLatin1Char('/') + QString::fromLatin1(hash) + extensionFromUrl(streamUrl);
 }
 
-void OnlineStreamLoader::prefetch(const QUrl& streamUrl)
+void OnlineStreamLoader::cancelActivePrefetch()
+{
+    if (!m_activeReply) {
+        return;
+    }
+
+    QNetworkReply* reply = m_activeReply;
+    m_activeReply = nullptr;
+    reply->abort();
+    reply->deleteLater();
+}
+
+void OnlineStreamLoader::prefetch(const QUrl& streamUrl, const StreamFetchOptions& options)
 {
     if (!streamUrl.isValid()) {
         emit prefetchFailed(streamUrl, QStringLiteral("无效的播放地址"));
@@ -61,15 +72,32 @@ void OnlineStreamLoader::prefetch(const QUrl& streamUrl)
         return;
     }
 
+    cancelActivePrefetch();
+
     QNetworkRequest request(streamUrl);
-    request.setHeader(QNetworkRequest::UserAgentHeader, QString::fromLatin1(kUserAgent));
-    request.setRawHeader("Referer", kReferer);
+    const QString userAgent = options.userAgent.isEmpty()
+        ? QString::fromLatin1(kDefaultUserAgent)
+        : options.userAgent;
+    request.setHeader(QNetworkRequest::UserAgentHeader, userAgent);
+    if (!options.referer.isEmpty()) {
+        request.setRawHeader("Referer", options.referer.toUtf8());
+    }
+    for (auto it = options.rawHeaders.cbegin(); it != options.rawHeaders.cend(); ++it) {
+        request.setRawHeader(it.key(), it.value());
+    }
     request.setTransferTimeout(60000);
 
     QNetworkReply* reply = m_networkManager->get(request);
+    m_activeReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply, streamUrl, cachePath]() {
+        if (m_activeReply == reply) {
+            m_activeReply = nullptr;
+        }
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
+            if (reply->error() == QNetworkReply::OperationCanceledError) {
+                return;
+            }
             emit prefetchFailed(streamUrl, reply->errorString());
             return;
         }

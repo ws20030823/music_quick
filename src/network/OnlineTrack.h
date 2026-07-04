@@ -11,6 +11,7 @@
 // =============================================================================
 
 struct OnlineTrack {
+    QString sourceId; // e.g. "myfreemp3", "gequbao"
     QString songId;
     QString displayTitle;
     QString artist;

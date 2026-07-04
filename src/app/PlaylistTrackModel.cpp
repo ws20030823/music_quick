@@ -44,7 +44,7 @@ QVariant PlaylistTrackModel::data(const QModelIndex& index, int role) const
     case StreamUrlRole:
         return entry.ref.streamUrl;
     case IsLikedRole:
-        return true;
+        return m_likedSongIds.contains(entry.ref.songId);
     case IsSelectedRole:
         return entry.isSelected;
     default:
@@ -78,6 +78,29 @@ void PlaylistTrackModel::setTracks(QVector<PlaylistTrackEntry> entries)
     m_playingRow = -1;
     m_selectedRow = -1;
     endResetModel();
+}
+
+void PlaylistTrackModel::setLikedSongIds(const QSet<QString>& songIds)
+{
+    m_likedSongIds = songIds;
+    if (m_entries.isEmpty()) {
+        return;
+    }
+    emit dataChanged(index(0), index(m_entries.size() - 1), {IsLikedRole});
+}
+
+void PlaylistTrackModel::refreshLikedState(int row, bool liked)
+{
+    if (row < 0 || row >= m_entries.size()) {
+        return;
+    }
+    const QString songId = m_entries.at(row).ref.songId;
+    if (liked) {
+        m_likedSongIds.insert(songId);
+    } else {
+        m_likedSongIds.remove(songId);
+    }
+    emit dataChanged(index(row), index(row), {IsLikedRole});
 }
 
 const QVector<PlaylistTrackEntry>& PlaylistTrackModel::entries() const

@@ -149,6 +149,7 @@ Item {
                     Layout.preferredWidth: Theme.searchLikeWidth
                     implicitWidth: 32
                     implicitHeight: 32
+                    z: 2
                     hoverEnabled: true
                     onClicked: root.likeClicked(index)
                     background: Rectangle {

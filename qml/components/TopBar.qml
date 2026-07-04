@@ -17,6 +17,40 @@ Rectangle {
 
     signal searchSubmitted(string keyword)
 
+    ListModel {
+        id: sourceListModel
+    }
+
+    function reloadSourceList() {
+        sourceListModel.clear()
+        const sources = app.musicSources
+        for (let i = 0; i < sources.length; ++i) {
+            sourceListModel.append({
+                sourceId: sources[i].sourceId,
+                name: sources[i].name
+            })
+        }
+        syncSourceSelection()
+    }
+
+    function syncSourceSelection() {
+        for (let i = 0; i < sourceListModel.count; ++i) {
+            if (sourceListModel.get(i).sourceId === app.activeMusicSourceId) {
+                sourceCombo.currentIndex = i
+                return
+            }
+        }
+    }
+
+    function sourceLabelAt(index) {
+        if (index < 0 || index >= sourceListModel.count) {
+            return app.activeMusicSourceName || qsTr("来源")
+        }
+        return sourceListModel.get(index).name
+    }
+
+    Component.onCompleted: reloadSourceList()
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 16
@@ -104,6 +138,89 @@ Rectangle {
                 }
             }
 
+            ComboBox {
+                id: sourceCombo
+                Layout.preferredWidth: Math.max(112, implicitContentWidth + 36)
+                Layout.preferredHeight: Theme.searchChipHeight
+                Layout.alignment: Qt.AlignVCenter
+                model: sourceListModel
+                textRole: "name"
+                valueRole: "sourceId"
+                hoverEnabled: true
+
+                onActivated: function(index) {
+                    const sourceId = sourceCombo.currentValue
+                    if (sourceId && sourceId !== app.activeMusicSourceId) {
+                        app.activeMusicSourceId = sourceId
+                    }
+                }
+
+                onCurrentIndexChanged: {
+                    if (sourceCombo.currentIndex < 0) {
+                        return
+                    }
+                    const sourceId = sourceCombo.currentValue
+                    if (sourceId && sourceId !== app.activeMusicSourceId) {
+                        app.activeMusicSourceId = sourceId
+                    }
+                }
+
+                Connections {
+                    target: app
+                    function onActiveMusicSourceChanged() {
+                        root.syncSourceSelection()
+                    }
+                }
+
+                contentItem: Text {
+                    leftPadding: 12
+                    rightPadding: sourceCombo.indicator.width + sourceCombo.spacing
+                    text: root.sourceLabelAt(sourceCombo.currentIndex)
+                    font.pixelSize: 13
+                    color: Theme.textPrimary
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+
+                indicator: Text {
+                    x: sourceCombo.width - width - 10
+                    y: (sourceCombo.height - height) / 2
+                    text: "\u25BE"
+                    font.pixelSize: 11
+                    color: Theme.textSecondary
+                }
+
+                background: Rectangle {
+                    implicitWidth: 112
+                    implicitHeight: Theme.searchChipHeight
+                    radius: Theme.searchChipHeight / 2
+                    color: sourceCombo.down ? Theme.accentSoft
+                           : (sourceCombo.hovered ? Theme.bgHover : Theme.bgCard)
+                    border.color: sourceCombo.activeFocus || sourceCombo.popup.visible
+                                  ? Theme.accent : Theme.borderStrong
+                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                }
+
+                delegate: ItemDelegate {
+                    width: sourceCombo.width
+                    required property string name
+                    text: name
+                    font.pixelSize: 13
+                    highlighted: sourceCombo.highlightedIndex === index
+                    background: Rectangle {
+                        color: highlighted ? Theme.accentSoft
+                               : (parent.hovered ? Theme.bgHover : "transparent")
+                    }
+                    HoverHandler {
+                        cursorShape: Qt.PointingHandCursor
+                    }
+                }
+
+                HoverHandler {
+                    cursorShape: Qt.PointingHandCursor
+                }
+            }
+
             Rectangle {
                 Layout.fillWidth: true
                 Layout.maximumWidth: 480
@@ -148,7 +265,7 @@ Rectangle {
                 implicitWidth: 32
                 implicitHeight: 32
                 enabled: false
-                opacity: 0.4
+                opacity: 0.35
                 Layout.alignment: Qt.AlignVCenter
                 background: Rectangle {
                     radius: 8
@@ -163,35 +280,9 @@ Rectangle {
                 }
             }
 
-            // 空白区可拖拽，不遮挡搜索框
-            Item {
-                id: dragSpacer
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-
-                MouseArea {
-                    anchors.fill: parent
-                    onPressed: function(mouse) {
-                        root.dragStart = Qt.point(mouse.x, mouse.y)
-                    }
-                    onPositionChanged: function(mouse) {
-                        if (pressed && root.window) {
-                            root.window.x += mouse.x - root.dragStart.x
-                            root.window.y += mouse.y - root.dragStart.y
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 20
-                Layout.alignment: Qt.AlignVCenter
-                color: Theme.borderStrong
-            }
+            Item { Layout.fillWidth: true }
 
             WindowControls {
-                id: windowControls
                 Layout.alignment: Qt.AlignVCenter
                 window: root.window
             }

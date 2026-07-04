@@ -15,6 +15,9 @@
 
 struct SearchResultEntry {
     QString songId;
+    QString sourceId;
+    QString sourceLabel;
+    QString detailUrl;
     QString streamUrl;
     QString coverUrl;
     TrackMetadata metadata;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QSet>
 #include <QVector>
 
 #include "app/PlaylistStore.h"
@@ -43,6 +44,9 @@ public:
     void setTracks(QVector<PlaylistTrackEntry> entries);
     const QVector<PlaylistTrackEntry>& entries() const;
 
+    void setLikedSongIds(const QSet<QString>& songIds);
+    void refreshLikedState(int row, bool liked);
+
     void setPlayingRow(int row);
     int playingRow() const;
 
@@ -56,4 +60,5 @@ private:
     QVector<PlaylistTrackEntry> m_entries;
     int m_playingRow = -1;
     int m_selectedRow = -1;
+    QSet<QString> m_likedSongIds;
 };

@@ -24,20 +24,30 @@ Item {
             width: root.width
             spacing: 0
 
-            // ── 搜索关键词标题 ──
+            // ── 搜索关键词标题 + 来源 ──
             Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: app.searchKeyword.length > 0 ? 72 : 0
+                Layout.preferredHeight: app.searchKeyword.length > 0 ? 88 : 0
                 visible: app.searchKeyword.length > 0
 
-                Text {
+                ColumnLayout {
                     anchors.left: parent.left
                     anchors.leftMargin: Theme.pagePadding
                     anchors.verticalCenter: parent.verticalCenter
-                    text: app.searchKeyword
-                    font.pixelSize: 26
-                    font.bold: true
-                    color: Theme.textPrimary
+                    spacing: 6
+
+                    Text {
+                        text: app.searchKeyword
+                        font.pixelSize: 26
+                        font.bold: true
+                        color: Theme.textPrimary
+                    }
+
+                    Text {
+                        text: qsTr("来源：%1").arg(app.activeMusicSourceName)
+                        font.pixelSize: 13
+                        color: Theme.textSecondary
+                    }
                 }
             }
 

@@ -107,4 +107,17 @@ ApplicationWindow {
             }
         }
     }
+
+    Loader {
+        id: nowPlayingLoader
+        anchors.fill: parent
+        z: 200
+        active: app.nowPlayingVisible
+        source: Qt.resolvedUrl("components/NowPlayingView.qml")
+        onLoaded: {
+            if (item) {
+                item.window = root
+            }
+        }
+    }
 }

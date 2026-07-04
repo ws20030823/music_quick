@@ -8,10 +8,13 @@ Item {
     id: root
 
     property alias model: listView.model
+    property bool showRemoveFromPlaylist: false
+    property string removeFromPlaylistLabel: qsTr("从歌单移除")
     signal rowSelected(int row)
     signal rowActivated(int row)
     signal likeClicked(int row)
     signal addToPlaylist(int row, string playlistId)
+    signal removeFromPlaylist(int row)
 
     property int contextRow: -1
 
@@ -183,6 +186,7 @@ Item {
                         Layout.preferredWidth: Theme.searchLikeWidth
                         implicitWidth: 32
                         implicitHeight: 32
+                        z: 2
                         hoverEnabled: true
                         onClicked: root.likeClicked(index)
                         background: Rectangle {
@@ -230,6 +234,12 @@ Item {
         MenuItem {
             text: qsTr("播放")
             onTriggered: root.rowActivated(root.contextRow)
+        }
+
+        MenuItem {
+            visible: root.showRemoveFromPlaylist
+            text: root.removeFromPlaylistLabel
+            onTriggered: root.removeFromPlaylist(root.contextRow)
         }
 
         Menu {

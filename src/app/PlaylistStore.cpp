@@ -1,5 +1,7 @@
 #include "app/PlaylistStore.h"
 
+#include "network/OnlineSongId.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -11,16 +13,30 @@
 
 namespace {
 
+void normalizeTrackRef(PlaylistTrackRef& track)
+{
+    track.songId = OnlineSongId::normalizeLegacySongId(track.songId);
+    if (track.sourceId.isEmpty()) {
+        QString src;
+        if (OnlineSongId::parse(track.songId, &src, nullptr)) {
+            track.sourceId = src;
+        }
+    }
+}
+
 PlaylistTrackRef trackFromJson(const QJsonObject& obj)
 {
     PlaylistTrackRef track;
     track.songId = obj.value(QStringLiteral("songId")).toString();
+    track.sourceId = obj.value(QStringLiteral("sourceId")).toString();
     track.title = obj.value(QStringLiteral("title")).toString();
     track.artist = obj.value(QStringLiteral("artist")).toString();
     track.album = obj.value(QStringLiteral("album")).toString();
+    track.detailUrl = obj.value(QStringLiteral("detailUrl")).toString();
     track.streamUrl = obj.value(QStringLiteral("streamUrl")).toString();
     track.coverUrl = obj.value(QStringLiteral("coverUrl")).toString();
     track.localPath = obj.value(QStringLiteral("localPath")).toString();
+    normalizeTrackRef(track);
     return track;
 }
 
@@ -28,9 +44,13 @@ QJsonObject trackToJson(const PlaylistTrackRef& track)
 {
     QJsonObject obj;
     obj.insert(QStringLiteral("songId"), track.songId);
+    obj.insert(QStringLiteral("sourceId"), track.sourceId);
     obj.insert(QStringLiteral("title"), track.title);
     obj.insert(QStringLiteral("artist"), track.artist);
     obj.insert(QStringLiteral("album"), track.album);
+    if (!track.detailUrl.isEmpty()) {
+        obj.insert(QStringLiteral("detailUrl"), track.detailUrl);
+    }
     obj.insert(QStringLiteral("streamUrl"), track.streamUrl);
     obj.insert(QStringLiteral("coverUrl"), track.coverUrl);
     obj.insert(QStringLiteral("localPath"), track.localPath);
@@ -179,7 +199,9 @@ bool PlaylistStore::deletePlaylist(const QString& id)
 
 bool PlaylistStore::addTrack(const QString& playlistId, const PlaylistTrackRef& track)
 {
-    if (track.songId.isEmpty()) {
+    PlaylistTrackRef normalized = track;
+    normalizeTrackRef(normalized);
+    if (normalized.songId.isEmpty()) {
         return false;
     }
 
@@ -190,12 +212,12 @@ bool PlaylistStore::addTrack(const QString& playlistId, const PlaylistTrackRef& 
 
     PlaylistInfo& playlist = m_playlists[idx];
     for (const PlaylistTrackRef& existing : playlist.tracks) {
-        if (existing.songId == track.songId) {
+        if (existing.songId == normalized.songId) {
             return false;
         }
     }
 
-    playlist.tracks.append(track);
+    playlist.tracks.append(normalized);
     save();
     emit playlistsChanged();
     return true;

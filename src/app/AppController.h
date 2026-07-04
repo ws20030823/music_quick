@@ -16,7 +16,9 @@
 #include "core/AudioPlayer.h"
 #include "core/PlaybackController.h"
 #include "core/PlaybackMode.h"
+#include "network/MusicSourceRegistry.h"
 #include "network/OnlineTrack.h"
+#include "network/StreamFetchOptions.h"
 
 #include <QImage>
 #include <QNetworkAccessManager>
@@ -26,7 +28,7 @@
 #include <QVariantList>
 #include <QMediaPlayer>
 
-class MyFreeMp3Client;
+class MusicSourceClient;
 class OnlineStreamLoader;
 
 class AppController final : public QObject
@@ -41,8 +43,14 @@ class AppController final : public QObject
     Q_PROPERTY(QString currentTitle READ currentTitle NOTIFY nowPlayingChanged)
     Q_PROPERTY(QString currentArtist READ currentArtist NOTIFY nowPlayingChanged)
     Q_PROPERTY(QString currentSubtitle READ currentSubtitle NOTIFY nowPlayingChanged)
+    Q_PROPERTY(QString currentAlbum READ currentAlbum NOTIFY nowPlayingChanged)
+    Q_PROPERTY(QString currentSource READ currentSource NOTIFY nowPlayingChanged)
+    Q_PROPERTY(QString currentSongId READ currentSongId NOTIFY nowPlayingChanged)
+    Q_PROPERTY(bool isOnlinePlayback READ isOnlinePlayback NOTIFY nowPlayingChanged)
+    Q_PROPERTY(bool isCurrentTrackLiked READ isCurrentTrackLiked NOTIFY currentLikeChanged)
+    Q_PROPERTY(bool nowPlayingVisible READ nowPlayingVisible WRITE setNowPlayingVisible NOTIFY nowPlayingVisibleChanged)
     Q_PROPERTY(bool hasCover READ hasCover NOTIFY nowPlayingChanged)
-    Q_PROPERTY(QImage currentCover READ currentCover NOTIFY nowPlayingChanged)
+    Q_PROPERTY(QString currentCoverUrl READ currentCoverUrl NOTIFY nowPlayingChanged)
     Q_PROPERTY(qint64 position READ position NOTIFY positionChanged)
     Q_PROPERTY(qint64 duration READ duration NOTIFY durationChanged)
     Q_PROPERTY(int volume READ volume WRITE setVolume NOTIFY volumeChanged)
@@ -68,6 +76,10 @@ class AppController final : public QObject
     Q_PROPERTY(int activePlaylistTrackCount READ activePlaylistTrackCount NOTIFY activePlaylistContentChanged)
     Q_PROPERTY(int likedTrackCount READ likedTrackCount NOTIFY playlistsChanged)
 
+    Q_PROPERTY(QString activeMusicSourceId READ activeMusicSourceId WRITE setActiveMusicSourceId NOTIFY activeMusicSourceChanged)
+    Q_PROPERTY(QString activeMusicSourceName READ activeMusicSourceName NOTIFY activeMusicSourceChanged)
+    Q_PROPERTY(QVariantList musicSources READ musicSources CONSTANT)
+
 public:
     explicit AppController(QObject* parent = nullptr);
     ~AppController() override;
@@ -83,7 +95,15 @@ public:
     QString currentTitle() const;
     QString currentArtist() const;
     QString currentSubtitle() const;
+    QString currentAlbum() const;
+    QString currentSource() const;
+    QString currentSongId() const;
+    bool isOnlinePlayback() const;
+    bool isCurrentTrackLiked() const;
+    bool nowPlayingVisible() const;
+    void setNowPlayingVisible(bool visible);
     bool hasCover() const;
+    QString currentCoverUrl() const;
     QImage currentCover() const;
     qint64 position() const;
     qint64 duration() const;
@@ -111,6 +131,11 @@ public:
     QString activePlaylistName() const;
     int activePlaylistTrackCount() const;
     int likedTrackCount() const;
+
+    QString activeMusicSourceId() const;
+    void setActiveMusicSourceId(const QString& id);
+    QString activeMusicSourceName() const;
+    QVariantList musicSources() const;
 
     Q_INVOKABLE void importFiles(const QList<QUrl>& urls);
     Q_INVOKABLE void togglePlayback();
@@ -144,11 +169,17 @@ public:
     Q_INVOKABLE void refreshActivePlaylist();
     Q_INVOKABLE void playPlaylistRow(int row);
     Q_INVOKABLE void removePlaylistTrack(int row);
+    Q_INVOKABLE void removeTrackFromActivePlaylist(int row);
+    Q_INVOKABLE void toggleLikePlaylistRow(int row);
+    Q_INVOKABLE bool isPlaylistRowLiked(int row) const;
+    Q_INVOKABLE void toggleCurrentLike();
 
 signals:
     void currentPageChanged();
     void playbackStateChanged();
     void nowPlayingChanged();
+    void currentLikeChanged();
+    void nowPlayingVisibleChanged();
     void positionChanged();
     void durationChanged();
     void volumeChanged();
@@ -166,6 +197,7 @@ signals:
     void playlistsChanged();
     void activePlaylistIdChanged();
     void activePlaylistContentChanged();
+    void activeMusicSourceChanged();
 
 private slots:
     void onSearchCompleted(const SearchPageResult& result, const QString& keyword);
@@ -192,10 +224,22 @@ private:
     void downloadSearchCover(int row, const QUrl& coverUrl);
     void syncSearchLikedStates();
     void syncLocalLikedStates();
+    void syncPlaylistLikedStates();
     void reloadActivePlaylistModel();
     PlaylistTrackRef trackRefFromSearchRow(int row) const;
     PlaylistTrackRef trackRefFromLocalRow(int row) const;
+    PlaylistTrackRef trackRefFromPlaylistRow(int row) const;
     void playOnlineTrackRef(const PlaylistTrackRef& track, bool autoPlay);
+    void playOnlineNext();
+    void playOnlinePrevious();
+    void handleOnlinePlaybackFailure(const QString& message);
+    void cancelPendingOnlineRequests();
+    void connectAllSourceClients();
+    void updateCurrentLikeState();
+    bool isPendingOnlineSearchRow(int row) const;
+    bool isPendingOnlinePlaylistRow(int row) const;
+
+    enum class OnlineQueueType { None, Search, Playlist };
 
     TrackListModel m_trackModel;
     SearchResultModel m_searchResultModel;
@@ -203,11 +247,13 @@ private:
     PlaylistStore m_playlistStore;
     AudioPlayer m_audioPlayer;
     PlaybackController m_playbackController;
-    MyFreeMp3Client* m_myFreeMp3Client = nullptr;
+    MusicSourceRegistry m_sourceRegistry;
     OnlineStreamLoader* m_streamLoader = nullptr;
     QNetworkAccessManager m_coverNetwork;
 
     bool m_pendingStreamAutoPlay = false;
+    QString m_pendingStreamUrl;
+    StreamFetchOptions m_currentStreamFetchOptions;
 
     int m_currentPage = 0;
     int m_currentRow = -1;
@@ -218,7 +264,12 @@ private:
     QString m_currentTitle;
     QString m_currentArtist;
     QString m_currentSubtitle;
+    QString m_currentAlbum;
+    QString m_currentSource;
+    QString m_currentSongId;
+    QString m_currentLocalPath;
     QImage m_currentCover;
+    bool m_nowPlayingVisible = false;
     bool m_hasCover = false;
     bool m_canControl = false;
     int m_volume = 50;
@@ -236,4 +287,9 @@ private:
 
     QString m_activePlaylistId;
     int m_pendingPlaylistRow = -1;
+    QString m_activeMusicSourceId = QStringLiteral("myfreemp3");
+    QVariantList m_musicSources;
+
+    OnlineQueueType m_onlineQueueType = OnlineQueueType::None;
+    int m_onlineQueueRow = -1;
 };

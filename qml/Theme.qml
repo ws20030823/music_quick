@@ -94,4 +94,14 @@ QtObject {
     readonly property int searchLikeWidth: 40
     readonly property int searchDurationWidth: 48
     readonly property int searchFileSizeWidth: 56
+
+    // ── 全屏播放页（网易云深色沉浸）──
+    readonly property color npBg: "#121214"
+    readonly property color npPanel: "#1A1A1E"
+    readonly property color npText: "#F3F4F6"
+    readonly property color npTextMuted: "#9CA3AF"
+    readonly property color npTextDim: "#6B7280"
+    readonly property color npBorder: "#2A2A30"
+    readonly property color npVinyl: "#0A0A0C"
+    readonly property int npVinylSize: 320
 }
