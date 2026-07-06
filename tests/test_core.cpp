@@ -15,6 +15,7 @@
 #include "test_music_source_ids.h"
 #include "test_gequbao_parser.h"
 #include "test_curl_http_client.h"
+#include "test_now_playing.h"
 
 // AudioPlayer：构造、音量、加载、toggle 等基础行为
 class TestAudioPlayer final : public QObject
@@ -254,6 +255,10 @@ int main(int argc, char* argv[])
     {
         CurlHttpClientTest curlHttpClientTests;
         status |= QTest::qExec(&curlHttpClientTests, argc, argv);
+    }
+    {
+        TestNowPlayingVisibility nowPlayingTests;
+        status |= QTest::qExec(&nowPlayingTests, argc, argv);
     }
 
     return status;

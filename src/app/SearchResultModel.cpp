@@ -175,13 +175,17 @@ QString SearchResultModel::streamUrlAt(int row) const
     return m_entries.at(row).streamUrl;
 }
 
-void SearchResultModel::updateStreamUrl(int row, const QString& streamUrl, const QString& coverUrl)
+void SearchResultModel::updateStreamUrl(int row,
+                                        const QString& streamUrl,
+                                        const QString& coverUrl,
+                                        const QString& lyrics)
 {
     if (row < 0 || row >= m_entries.size()) {
         return;
     }
     m_entries[row].streamUrl = streamUrl;
     m_entries[row].coverUrl = coverUrl;
+    m_entries[row].lyrics = lyrics;
     emit dataChanged(index(row), index(row), {FilePathRole, StreamUrlRole});
 }
 

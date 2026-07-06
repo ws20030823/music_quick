@@ -90,6 +90,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.playbackBarHeight
             Layout.minimumHeight: Theme.playbackBarHeight
+            window: root
         }
     }
 
@@ -108,16 +109,9 @@ ApplicationWindow {
         }
     }
 
-    Loader {
-        id: nowPlayingLoader
+    NowPlayingView {
         anchors.fill: parent
         z: 200
-        active: app.nowPlayingVisible
-        source: Qt.resolvedUrl("components/NowPlayingView.qml")
-        onLoaded: {
-            if (item) {
-                item.window = root
-            }
-        }
+        window: root
     }
 }

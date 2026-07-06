@@ -61,6 +61,7 @@ OnlineTrack buildTrackFromDetail(const QString& trackId,
     track.detailUrl = QString::fromLatin1(kBaseUrl) + QStringLiteral("/music/") + musicId;
     track.coverUrl = detail.coverUrl;
     track.streamUrl = streamUrl;
+    track.lyrics = detail.lyrics;
     return track;
 }
 

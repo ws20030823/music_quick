@@ -138,6 +138,34 @@ SearchPageResult parseGequbaoSearchHtml(const QString& html)
     return result;
 }
 
+QString parseGequbaoLyricsHtml(const QString& html)
+{
+    static const QRegularExpression lrcRe(
+        QStringLiteral(R"(id="content-lrc"[^>]*>([\s\S]*?)</div>)"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch match = lrcRe.match(html);
+    if (!match.hasMatch()) {
+        return {};
+    }
+
+    QString text = match.captured(1);
+    text.replace(QRegularExpression(QStringLiteral("<br\\s*/?>"), QRegularExpression::CaseInsensitiveOption),
+                 QStringLiteral("\n"));
+    static const QRegularExpression tagRe(QStringLiteral("<[^>]+>"));
+    text.remove(tagRe);
+    text.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    text.replace(QStringLiteral("\r"), QStringLiteral("\n"));
+
+    QStringList lines;
+    for (const QString& line : text.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        const QString trimmed = line.trimmed();
+        if (!trimmed.isEmpty()) {
+            lines.append(trimmed);
+        }
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
 GequbaoMusicDetail parseGequbaoMusicDetailHtml(const QString& html)
 {
     GequbaoMusicDetail detail;
@@ -166,6 +194,7 @@ GequbaoMusicDetail parseGequbaoMusicDetailHtml(const QString& html)
         detail.artist = extractWindowString(html, QStringLiteral("mp3_author"));
     }
     detail.coverUrl = extractWindowString(html, QStringLiteral("mp3_cover"));
+    detail.lyrics = parseGequbaoLyricsHtml(html);
 
     return detail;
 }

@@ -10,10 +10,12 @@ struct GequbaoMusicDetail {
     QString title;
     QString artist;
     QString coverUrl;
+    QString lyrics;
 
     bool isValid() const { return !playId.isEmpty(); }
 };
 
 SearchPageResult parseGequbaoSearchHtml(const QString& html);
 GequbaoMusicDetail parseGequbaoMusicDetailHtml(const QString& html);
+QString parseGequbaoLyricsHtml(const QString& html);
 QString parseGequbaoPlayUrlJson(const QString& json);

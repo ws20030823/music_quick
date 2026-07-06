@@ -1,4 +1,4 @@
-// NowPlayingView.qml — 网易云风格全屏播放页（黑胶 + 歌词 + 底栏控制）
+// NowPlayingView.qml — 网易云风格全屏播放页（黑胶 + 白色歌词 + 底栏控制）
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -23,7 +23,7 @@ Rectangle {
     }
 
     opacity: app.nowPlayingVisible ? 1 : 0
-    visible: opacity > 0
+    visible: app.nowPlayingVisible
     enabled: app.nowPlayingVisible
 
     Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
@@ -42,7 +42,7 @@ Rectangle {
         }
     }
 
-    component DarkIconButton: ToolButton {
+    component NpIconButton: ToolButton {
         id: btn
         property string iconName: ""
         property int iconSize: 18
@@ -52,7 +52,8 @@ Rectangle {
         implicitHeight: 36
         background: Rectangle {
             radius: 18
-            color: btn.down ? "#33FFFFFF" : (btn.hovered ? "#1AFFFFFF" : "transparent")
+            color: btn.down ? Theme.accentSoft
+                 : (btn.hovered ? Theme.bgHover : "transparent")
         }
         contentItem: AppIcon {
             name: btn.iconName
@@ -62,7 +63,7 @@ Rectangle {
         }
     }
 
-    component DarkSlider: Slider {
+    component NpSlider: Slider {
         id: control
         property bool interactive: true
         enabled: interactive
@@ -74,7 +75,9 @@ Rectangle {
             implicitWidth: 10
             implicitHeight: 10
             radius: 5
-            color: Theme.npText
+            color: Theme.sliderHandle
+            border.color: Theme.borderStrong
+            border.width: 1
         }
         background: Item {
             x: control.leftPadding
@@ -86,7 +89,7 @@ Rectangle {
                 width: parent.width
                 height: 3
                 radius: 1.5
-                color: Theme.npBorder
+                color: Theme.sliderTrack
                 Rectangle {
                     width: control.visualPosition * parent.width
                     height: parent.height
@@ -117,8 +120,8 @@ Rectangle {
                 onClicked: app.nowPlayingVisible = false
                 background: Rectangle {
                     radius: 18
-                    color: collapseBtn.down ? "#33FFFFFF"
-                         : (collapseBtn.hovered ? "#1AFFFFFF" : "transparent")
+                    color: collapseBtn.down ? Theme.accentSoft
+                         : (collapseBtn.hovered ? Theme.bgHover : "transparent")
                 }
                 contentItem: Item {
                     width: 16
@@ -142,7 +145,7 @@ Rectangle {
                 color: Theme.npTextMuted
             }
 
-            DarkIconButton {
+            NpIconButton {
                 iconName: Icons.modeIconName(app.playbackMode)
                 iconSize: 16
                 enabled: app.canControl
@@ -171,109 +174,31 @@ Rectangle {
             Layout.bottomMargin: 16
             spacing: 56
 
-            // 左侧黑胶
+            // 左侧黑胶舞台
             Item {
                 Layout.fillHeight: true
-                Layout.preferredWidth: Theme.npVinylSize + 80
-                Layout.maximumWidth: Theme.npVinylSize + 80
+                Layout.preferredWidth: Theme.npVinylSize + 96
+                Layout.maximumWidth: Theme.npVinylSize + 96
                 Layout.alignment: Qt.AlignVCenter
 
-                Item {
-                    id: vinylStage
+                Rectangle {
                     anchors.centerIn: parent
-                    width: Theme.npVinylSize
-                    height: Theme.npVinylSize
+                    width: Theme.npVinylSize + 48
+                    height: width
+                    radius: width / 2
+                    color: Theme.npVinylStage
+                }
 
-                    // 唱臂
-                    Rectangle {
-                        id: toneArm
-                        width: 140
-                        height: 8
-                        radius: 4
-                        color: "#E5E7EB"
-                        x: vinylStage.width * 0.58
-                        y: -8
-                        transformOrigin: Item.TopLeft
-                        rotation: app.isPlaying ? 18 : 0
-                        Behavior on rotation { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
-
-                        Rectangle {
-                            width: 18
-                            height: 18
-                            radius: 9
-                            color: "#D1D5DB"
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    // 唱片外圈
-                    Item {
-                        id: disc
-                        anchors.centerIn: parent
-                        width: Theme.npVinylSize
-                        height: Theme.npVinylSize
-
-                        RotationAnimation on rotation {
-                            running: app.isPlaying
-                            from: 0
-                            to: 360
-                            duration: 18000
-                            loops: Animation.Infinite
-                        }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: width / 2
-                            color: Theme.npVinyl
-                            border.color: "#1F1F24"
-                            border.width: 2
-
-                            // 纹路
-                            Repeater {
-                                model: 5
-                                Rectangle {
-                                    anchors.centerIn: parent
-                                    width: parent.width * (0.92 - index * 0.08)
-                                    height: width
-                                    radius: width / 2
-                                    color: "transparent"
-                                    border.color: "#151518"
-                                    border.width: 1
-                                }
-                            }
-
-                            // 中心标签 + 封面
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: parent.width * 0.38
-                                height: width
-                                radius: width / 2
-                                color: Theme.accent
-                                clip: true
-
-                                Image {
-                                    anchors.fill: parent
-                                    source: app.currentCoverUrl
-                                    cache: false
-                                    fillMode: Image.PreserveAspectCrop
-                                    visible: app.hasCover
-                                }
-
-                                AppIcon {
-                                    anchors.centerIn: parent
-                                    visible: !app.hasCover
-                                    name: Icons.play
-                                    size: 36
-                                    color: "#FFFFFF"
-                                }
-                            }
-                        }
-                    }
+                VinylDisc {
+                    anchors.centerIn: parent
+                    playing: app.isPlaying
+                    coverUrl: app.currentCoverUrl
+                    hasCover: app.hasCover
+                    discSize: Theme.npVinylSize
                 }
             }
 
-            // 右侧信息 + 歌词
+            // 右侧信息 + 歌词（白色主题）
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -299,8 +224,8 @@ Rectangle {
                         visible: !app.isOnlinePlayback && app.currentTitle.length > 0
                         Layout.alignment: Qt.AlignTop
                         radius: 4
-                        color: "#33FFFFFF"
-                        border.color: Theme.npBorder
+                        color: Theme.accentSoft
+                        border.color: Theme.borderStrong
                         implicitWidth: localBadge.implicitWidth + 12
                         implicitHeight: 22
 
@@ -309,7 +234,7 @@ Rectangle {
                             anchors.centerIn: parent
                             text: qsTr("本地")
                             font.pixelSize: 11
-                            color: Theme.npTextMuted
+                            color: Theme.accent
                         }
                     }
                 }
@@ -318,61 +243,67 @@ Rectangle {
                     Layout.fillWidth: true
                     spacing: 32
 
-                    ColumnLayout {
-                        spacing: 4
-                        Text {
-                            text: qsTr("专辑：%1").arg(app.currentAlbum || qsTr("未知专辑"))
-                            font.pixelSize: 13
-                            color: Theme.npTextMuted
-                        }
+                    Text {
+                        text: qsTr("专辑：%1").arg(app.currentAlbum || qsTr("未知专辑"))
+                        font.pixelSize: 13
+                        color: Theme.npTextMuted
                     }
-                    ColumnLayout {
-                        spacing: 4
-                        Text {
-                            text: qsTr("歌手：%1").arg(app.currentArtist || qsTr("未知艺术家"))
-                            font.pixelSize: 13
-                            color: Theme.npTextMuted
-                        }
+                    Text {
+                        text: qsTr("歌手：%1").arg(app.currentArtist || qsTr("未知艺术家"))
+                        font.pixelSize: 13
+                        color: Theme.npTextMuted
                     }
-                    ColumnLayout {
-                        spacing: 4
-                        Text {
-                            text: qsTr("来源：%1").arg(app.currentSource || qsTr("—"))
-                            font.pixelSize: 13
-                            color: Theme.npTextMuted
-                        }
+                    Text {
+                        text: qsTr("来源：%1").arg(app.currentSource || qsTr("—"))
+                        font.pixelSize: 13
+                        color: Theme.npTextMuted
                     }
+                    Item { Layout.fillWidth: true }
                 }
 
-                Rectangle {
+                // 歌词面板
+                Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    radius: Theme.radiusLg
-                    color: Theme.npPanel
-                    border.color: Theme.npBorder
-                    border.width: 1
-                    clip: true
 
-                    ScrollView {
+                    Rectangle {
                         anchors.fill: parent
-                        anchors.margins: 24
+                        anchors.topMargin: 3
+                        radius: Theme.radiusLg
+                        color: Theme.npLyricsShadow
+                    }
+
+                    Rectangle {
+                        id: lyricsCard
+                        anchors.fill: parent
+                        radius: Theme.radiusLg
+                        color: Theme.npLyricsBg
+                        border.color: Theme.npBorder
+                        border.width: 1
                         clip: true
-                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-                        Column {
-                            width: parent.width
-                            spacing: 16
-                            topPadding: 8
-                            bottomPadding: 24
+                        ScrollView {
+                            anchors.fill: parent
+                            clip: true
+                            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-                            Text {
-                                width: parent.width
-                                text: qsTr("暂无歌词")
-                                font.pixelSize: 15
-                                lineHeight: 1.8
-                                color: Theme.npTextDim
-                                horizontalAlignment: Text.AlignHCenter
-                                wrapMode: Text.WordWrap
+                            Column {
+                                width: lyricsCard.width
+                                spacing: 14
+                                topPadding: 28
+                                leftPadding: 28
+                                rightPadding: 28
+                                bottomPadding: 28
+
+                                Text {
+                                    width: parent.width - parent.leftPadding - parent.rightPadding
+                                    text: app.currentLyrics.length > 0 ? app.currentLyrics : qsTr("暂无歌词")
+                                    font.pixelSize: 16
+                                    lineHeight: 1.85
+                                    color: app.currentLyrics.length > 0 ? Theme.npText : Theme.npTextDim
+                                    horizontalAlignment: app.currentLyrics.length > 0 ? Text.AlignLeft : Text.AlignHCenter
+                                    wrapMode: Text.WordWrap
+                                }
                             }
                         }
                     }
@@ -408,8 +339,10 @@ Rectangle {
                         width: Theme.coverSize
                         height: Theme.coverSize
                         radius: Theme.radiusMd
-                        color: Theme.npBg
+                        color: Theme.bgBase
                         clip: true
+                        border.color: Theme.npBorder
+                        border.width: 1
                         Image {
                             anchors.fill: parent
                             source: app.currentCoverUrl
@@ -446,7 +379,7 @@ Rectangle {
                         }
                     }
 
-                    DarkIconButton {
+                    NpIconButton {
                         iconName: app.isCurrentTrackLiked ? Icons.heartFilled : Icons.heart
                         iconSize: 16
                         enabled: app.currentSongId.length > 0
@@ -468,7 +401,7 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 16
 
-                        DarkIconButton {
+                        NpIconButton {
                             iconName: Icons.modeIconName(app.playbackMode)
                             enabled: app.canControl
                             onClicked: { if (app.canControl) app.cyclePlaybackMode() }
@@ -479,12 +412,12 @@ Rectangle {
                                 anchors.centerIn: parent
                             }
                         }
-                        DarkIconButton {
+                        NpIconButton {
                             iconName: Icons.prev
                             enabled: app.canControl
                             onClicked: { if (app.canControl) app.playPrevious() }
                         }
-                        DarkIconButton {
+                        NpIconButton {
                             iconName: app.isPlaying ? Icons.pause : Icons.play
                             iconSize: 22
                             implicitWidth: 44
@@ -492,18 +425,19 @@ Rectangle {
                             enabled: app.canControl
                             background: Rectangle {
                                 radius: 22
-                                color: parent.down ? "#33FFFFFF" : (parent.hovered ? "#1AFFFFFF" : Theme.npBg)
+                                color: parent.down ? Theme.accentSoft
+                                     : (parent.hovered ? Theme.bgHover : Theme.bgBase)
                                 border.color: Theme.npBorder
                                 border.width: 1
                             }
                             onClicked: { if (app.canControl) app.togglePlayback() }
                         }
-                        DarkIconButton {
+                        NpIconButton {
                             iconName: Icons.next
                             enabled: app.canControl
                             onClicked: { if (app.canControl) app.playNext() }
                         }
-                        DarkIconButton {
+                        NpIconButton {
                             iconName: Icons.playlist
                             enabled: app.canControl
                             onClicked: { if (app.canControl) app.queueVisible = true }
@@ -523,7 +457,7 @@ Rectangle {
                             Layout.preferredWidth: 40
                         }
 
-                        DarkSlider {
+                        NpSlider {
                             id: npProgress
                             Layout.fillWidth: true
                             interactive: app.canControl && app.duration > 0
@@ -569,7 +503,7 @@ Rectangle {
                             }
                         }
 
-                        DarkIconButton {
+                        NpIconButton {
                             anchors.fill: parent
                             iconName: Icons.volume
                             onClicked: npVolumePopup.open()

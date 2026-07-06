@@ -209,6 +209,7 @@ QString AppController::currentSubtitle() const { return m_currentSubtitle; }
 QString AppController::currentAlbum() const { return m_currentAlbum; }
 
 QString AppController::currentSource() const { return m_currentSource; }
+QString AppController::currentLyrics() const { return m_currentLyrics; }
 
 QString AppController::currentSongId() const { return m_currentSongId; }
 
@@ -231,6 +232,16 @@ void AppController::setNowPlayingVisible(bool visible)
     }
     m_nowPlayingVisible = visible;
     emit nowPlayingVisibleChanged();
+}
+
+void AppController::openNowPlaying()
+{
+    setNowPlayingVisible(true);
+}
+
+void AppController::closeNowPlaying()
+{
+    setNowPlayingVisible(false);
 }
 
 void AppController::updateCurrentLikeState()
@@ -544,7 +555,7 @@ void AppController::playSearchRow(int row)
 
     const QString cachedUrl = entry.streamUrl;
     if (!cachedUrl.isEmpty()) {
-        loadOnlineStream(cachedUrl, m_currentTitle, m_currentArtist, entry.metadata.cover, true);
+        loadOnlineStream(cachedUrl, m_currentTitle, m_currentArtist, entry.metadata.cover, true, entry.lyrics);
         return;
     }
 
@@ -579,7 +590,7 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
             return;
         }
 
-        m_searchResultModel.updateStreamUrl(m_pendingSearchRow, track.streamUrl, track.coverUrl);
+        m_searchResultModel.updateStreamUrl(m_pendingSearchRow, track.streamUrl, track.coverUrl, track.lyrics);
         const QString songId = m_searchResultModel.songIdAt(m_pendingSearchRow);
         m_playlistStore.updateTrackStreamUrl(songId, track.streamUrl, track.coverUrl);
         if (!track.coverUrl.isEmpty()) {
@@ -594,7 +605,7 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
         const QString title = track.title.isEmpty() ? track.displayTitle : track.title;
         const QString artist = track.artist.isEmpty() ? QStringLiteral("在线音乐") : track.artist;
         setSearchStatus(QStringLiteral("正在播放…"));
-        loadOnlineStream(track.streamUrl, title, artist, cover, true);
+        loadOnlineStream(track.streamUrl, title, artist, cover, true, track.lyrics);
         return;
     }
 
@@ -615,7 +626,7 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
         const QString title = track.title.isEmpty() ? track.displayTitle : track.title;
         const QString artist = track.artist.isEmpty() ? QStringLiteral("在线音乐") : track.artist;
         setSearchStatus(QStringLiteral("正在播放…"));
-        loadOnlineStream(track.streamUrl, title, artist, {}, true);
+        loadOnlineStream(track.streamUrl, title, artist, {}, true, track.lyrics);
     }
 }
 
@@ -685,7 +696,8 @@ void AppController::loadOnlineStream(const QString& streamUrl,
                                      const QString& title,
                                      const QString& artist,
                                      const QImage& cover,
-                                     bool autoPlay)
+                                     bool autoPlay,
+                                     const QString& lyrics)
 {
     if (streamUrl.isEmpty() || !m_streamLoader) {
         return;
@@ -709,6 +721,7 @@ void AppController::loadOnlineStream(const QString& streamUrl,
     m_currentFilePath = streamUrl;
     m_currentTitle = title;
     m_currentArtist = artist;
+    m_currentLyrics = lyrics;
     m_currentCover = cover;
     m_hasCover = !cover.isNull();
     m_pendingStreamAutoPlay = autoPlay;
@@ -1099,6 +1112,7 @@ void AppController::loadTrack(int row, bool autoPlay)
         m_currentSongId = PlaylistStore::localSongId(path);
         m_currentLocalPath = path;
     }
+    m_currentLyrics.clear();
 
     if (!m_canControl) {
         m_canControl = true;

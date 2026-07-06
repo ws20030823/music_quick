@@ -1,14 +1,10 @@
 // PlaybackBar.qml — 网易云式底栏：左信息 | 中控制+进度 | 右音量/队列
 
 import QtQuick
-
 import QtQuick.Controls
-
 import QtQuick.Layouts
-
+import QtQuick.Window
 import MusicQuick
-
-
 
 Rectangle {
 
@@ -18,9 +14,29 @@ Rectangle {
 
     implicitHeight: Theme.playbackBarHeight
 
-
+    required property Window window
 
     property bool seeking: false
+
+    function pointOnInteractiveControl(x, y) {
+        var item = contentHost.childAt(x, y)
+        while (item && item !== root) {
+            if (item.suppressNowPlayingOpen === true)
+                return true
+            item = item.parent
+        }
+        return false
+    }
+
+    function openNowPlayingIfBlank(x, y) {
+        if (!pointOnInteractiveControl(x, y))
+            app.openNowPlaying()
+    }
+
+    // 供 QML 单元测试调用
+    function isInteractiveControlAt(x, y) {
+        return pointOnInteractiveControl(x, y)
+    }
 
 
 
@@ -35,8 +51,6 @@ Rectangle {
         color: Theme.border
 
     }
-
-
 
     function formatMs(ms) {
 
@@ -63,6 +77,8 @@ Rectangle {
         property int iconSize: 20
 
         property bool interactive: true
+
+        property bool suppressNowPlayingOpen: true
 
         property color iconColor: interactive ? Theme.textPrimary : Theme.iconMuted
 
@@ -94,6 +110,7 @@ Rectangle {
     component PlaybackSlider: Slider {
         id: control
         property bool interactive: true
+        property bool suppressNowPlayingOpen: true
 
         readonly property real _fillRatio: {
             if (control.from > control.to)
@@ -151,15 +168,15 @@ Rectangle {
 
 
 
-    RowLayout {
-
+    Item {
+        id: contentHost
         anchors.fill: parent
 
-        anchors.leftMargin: 16
-
-        anchors.rightMargin: 16
-
-        spacing: 16
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
+            spacing: 16
 
 
 
@@ -169,14 +186,6 @@ Rectangle {
             Layout.maximumWidth: 320
             Layout.fillHeight: true
             Layout.alignment: Qt.AlignVCenter
-
-            MouseArea {
-                anchors.fill: parent
-                enabled: app.canControl && app.currentTitle.length > 0
-                hoverEnabled: true
-                cursorShape: containsMouse ? Qt.PointingHandCursor : Qt.ArrowCursor
-                onClicked: app.nowPlayingVisible = true
-            }
 
             RowLayout {
                 id: trackInfoSection
@@ -275,17 +284,14 @@ Rectangle {
 
 
 
-        ColumnLayout {
-
+        Item {
             Layout.fillWidth: true
-
             Layout.fillHeight: true
-
             Layout.alignment: Qt.AlignVCenter
 
-            spacing: 6
-
-
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 6
 
             RowLayout {
 
@@ -448,6 +454,8 @@ Rectangle {
 
             }
 
+            }
+
         }
 
 
@@ -469,6 +477,8 @@ Rectangle {
             Item {
 
                 id: volumeAnchor
+
+                property bool suppressNowPlayingOpen: true
 
                 Layout.preferredWidth: 36
 
@@ -607,6 +617,19 @@ Rectangle {
 
         }
 
+        }
+
+    }
+
+    MouseArea {
+        id: blankOpenLayer
+        objectName: "blankOpenLayer"
+        anchors.fill: parent
+        z: 50
+        propagateComposedEvents: true
+        onClicked: function(mouse) {
+            openNowPlayingIfBlank(mouse.x, mouse.y)
+        }
     }
 
 

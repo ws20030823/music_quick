@@ -19,6 +19,7 @@ struct OnlineTrack {
     QString detailUrl;
     QString streamUrl;
     QString coverUrl;
+    QString lyrics;
 };
 
 struct SearchPageResult {

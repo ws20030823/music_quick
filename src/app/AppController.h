@@ -45,6 +45,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString currentSubtitle READ currentSubtitle NOTIFY nowPlayingChanged)
     Q_PROPERTY(QString currentAlbum READ currentAlbum NOTIFY nowPlayingChanged)
     Q_PROPERTY(QString currentSource READ currentSource NOTIFY nowPlayingChanged)
+    Q_PROPERTY(QString currentLyrics READ currentLyrics NOTIFY nowPlayingChanged)
     Q_PROPERTY(QString currentSongId READ currentSongId NOTIFY nowPlayingChanged)
     Q_PROPERTY(bool isOnlinePlayback READ isOnlinePlayback NOTIFY nowPlayingChanged)
     Q_PROPERTY(bool isCurrentTrackLiked READ isCurrentTrackLiked NOTIFY currentLikeChanged)
@@ -97,11 +98,14 @@ public:
     QString currentSubtitle() const;
     QString currentAlbum() const;
     QString currentSource() const;
+    QString currentLyrics() const;
     QString currentSongId() const;
     bool isOnlinePlayback() const;
     bool isCurrentTrackLiked() const;
     bool nowPlayingVisible() const;
     void setNowPlayingVisible(bool visible);
+    Q_INVOKABLE void openNowPlaying();
+    Q_INVOKABLE void closeNowPlaying();
     bool hasCover() const;
     QString currentCoverUrl() const;
     QImage currentCover() const;
@@ -213,7 +217,8 @@ private:
                           const QString& title,
                           const QString& artist,
                           const QImage& cover,
-                          bool autoPlay);
+                          bool autoPlay,
+                          const QString& lyrics = {});
     void rebuildShuffleOrder();
     void applyNavigateResult(const PlaybackNavigateResult& result, int currentRow);
     void updatePlaybackModeProperties();
@@ -266,6 +271,7 @@ private:
     QString m_currentSubtitle;
     QString m_currentAlbum;
     QString m_currentSource;
+    QString m_currentLyrics;
     QString m_currentSongId;
     QString m_currentLocalPath;
     QImage m_currentCover;

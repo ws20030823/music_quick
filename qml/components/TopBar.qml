@@ -1,4 +1,4 @@
-// TopBar.qml — 网易云风格顶栏：Logo + 竖线 + 后退/搜索/窗口控制
+// TopBar.qml — 网易云风格顶栏：Logo + 竖线 + 后退/搜索 | 窗口控制贴右
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -13,7 +13,6 @@ Rectangle {
     required property Window window
 
     property alias searchField: searchInput
-    property point dragStart
 
     signal searchSubmitted(string keyword)
 
@@ -51,13 +50,14 @@ Rectangle {
 
     Component.onCompleted: reloadSourceList()
 
+    // 外层：左品牌区 | 中间功能区(fill) | 右窗口按钮(贴边)
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 16
         anchors.rightMargin: 0
         spacing: 0
 
-        // ── Logo + 品牌名（紧凑宽度，竖线紧跟文字右侧）──
+        // ── Logo + 品牌名 ──
         Item {
             id: brandArea
             Layout.preferredHeight: Theme.topBarHeight
@@ -78,7 +78,6 @@ Rectangle {
                     antialiasing: true
                 }
                 Text {
-                    id: brandText
                     anchors.verticalCenter: parent.verticalCenter
                     text: qsTr("Music Quick")
                     font.pixelSize: 16
@@ -90,20 +89,14 @@ Rectangle {
             MouseArea {
                 anchors.fill: parent
                 onPressed: function(mouse) {
-                    root.dragStart = Qt.point(mouse.x, mouse.y)
-                }
-                onPositionChanged: function(mouse) {
-                    if (pressed && root.window) {
-                        root.window.x += mouse.x - root.dragStart.x
-                        root.window.y += mouse.y - root.dragStart.y
-                    }
+                    if (mouse.button === Qt.LeftButton && root.window)
+                        root.window.startSystemMove()
                 }
             }
         }
 
         Item { Layout.preferredWidth: 12 }
 
-        // ── 竖线（品牌名右侧）──
         Rectangle {
             Layout.preferredWidth: 1
             Layout.preferredHeight: 20
@@ -113,7 +106,7 @@ Rectangle {
 
         Item { Layout.preferredWidth: 10 }
 
-        // ── 后退 + 搜索 + 语音 + 窗口控制 ──
+        // ── 中间：后退 + 来源 + 搜索 + 语音 + 右侧弹性空白(可拖动) ──
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -150,19 +143,16 @@ Rectangle {
 
                 onActivated: function(index) {
                     const sourceId = sourceCombo.currentValue
-                    if (sourceId && sourceId !== app.activeMusicSourceId) {
+                    if (sourceId && sourceId !== app.activeMusicSourceId)
                         app.activeMusicSourceId = sourceId
-                    }
                 }
 
                 onCurrentIndexChanged: {
-                    if (sourceCombo.currentIndex < 0) {
+                    if (sourceCombo.currentIndex < 0)
                         return
-                    }
                     const sourceId = sourceCombo.currentValue
-                    if (sourceId && sourceId !== app.activeMusicSourceId) {
+                    if (sourceId && sourceId !== app.activeMusicSourceId)
                         app.activeMusicSourceId = sourceId
-                    }
                 }
 
                 Connections {
@@ -229,7 +219,6 @@ Rectangle {
                 radius: 17
                 color: Theme.bgCard
                 border.color: searchInput.activeFocus ? Theme.accent : Theme.borderStrong
-                z: 2
 
                 Behavior on border.color { ColorAnimation { duration: 200 } }
 
@@ -280,12 +269,24 @@ Rectangle {
                 }
             }
 
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
-            WindowControls {
-                Layout.alignment: Qt.AlignVCenter
-                window: root.window
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: function(mouse) {
+                        if (mouse.button === Qt.LeftButton && root.window)
+                            root.window.startSystemMove()
+                    }
+                }
             }
+        }
+
+        // ── 窗口控制：外层 RowLayout 最后一项，始终贴右 ──
+        WindowControls {
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            window: root.window
         }
     }
 }

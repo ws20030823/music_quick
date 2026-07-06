@@ -90,6 +90,19 @@ qt_add_resources(MusicQuick "app_icons"
     FILES ${MUSICQUICK_ICON_FILES}
 )
 
+set(MUSICQUICK_NOWPLAYING_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/nowplaying")
+set(MUSICQUICK_NOWPLAYING_NAMES disc_ring.svg tonearm.svg)
+set(MUSICQUICK_NOWPLAYING_FILES "")
+foreach(_asset IN LISTS MUSICQUICK_NOWPLAYING_NAMES)
+    set(_asset_path "${MUSICQUICK_NOWPLAYING_DIR}/${_asset}")
+    set_source_files_properties("${_asset_path}" PROPERTIES QT_RESOURCE_ALIAS "${_asset}")
+    list(APPEND MUSICQUICK_NOWPLAYING_FILES "${_asset_path}")
+endforeach()
+qt_add_resources(MusicQuick "nowplaying_assets"
+    PREFIX "/nowplaying"
+    FILES ${MUSICQUICK_NOWPLAYING_FILES}
+)
+
 qt_add_qml_module(MusicQuick
     URI MusicQuick
     VERSION 1.0
@@ -108,6 +121,7 @@ qt_add_qml_module(MusicQuick
         qml/components/CreatePlaylistDialog.qml
         qml/components/QueueDialog.qml
         qml/components/NowPlayingView.qml
+        qml/components/VinylDisc.qml
         qml/pages/HomePage.qml
         qml/pages/LocalMusicPage.qml
         qml/pages/SearchPage.qml
@@ -130,8 +144,42 @@ if(WIN32 AND NOT ANDROID)
 endif()
 
 if(NOT ANDROID)
+set(MUSICQUICK_APP_CONTROLLER_SOURCES
+    src/app/AppController.cpp
+    src/app/AppController.h
+    src/app/PlaylistStore.cpp
+    src/app/PlaylistStore.h
+    src/app/PlaylistTrackModel.cpp
+    src/app/PlaylistTrackModel.h
+    src/app/SearchResultModel.cpp
+    src/app/SearchResultModel.h
+    src/app/TrackListModel.cpp
+    src/app/TrackListModel.h
+    src/network/MyFreeMp3Parser.cpp
+    src/network/MyFreeMp3Parser.h
+    src/network/MyFreeMp3Client.cpp
+    src/network/MyFreeMp3Client.h
+    src/network/GequbaoParser.cpp
+    src/network/GequbaoParser.h
+    src/network/GequbaoClient.cpp
+    src/network/GequbaoClient.h
+    src/network/CurlHttpClient.cpp
+    src/network/CurlHttpClient.h
+    src/network/MusicSourceClient.h
+    src/network/MusicSourceRegistry.cpp
+    src/network/MusicSourceRegistry.h
+    src/network/OnlineSongId.cpp
+    src/network/OnlineSongId.h
+    src/network/OnlineStreamLoader.cpp
+    src/network/OnlineStreamLoader.h
+    src/network/OnlineTrack.h
+    src/network/StreamFetchOptions.h
+)
+
 qt_add_executable(MusicQuickTests
     tests/test_core.cpp
+    tests/test_now_playing.cpp
+    tests/test_now_playing.h
     tests/test_music_source_ids.cpp
     tests/test_music_source_ids.h
     tests/test_gequbao_parser.cpp
@@ -145,19 +193,25 @@ qt_add_executable(MusicQuickTests
     src/media/TrackMetadataReader.cpp
     src/media/TrackMetadataReader.h
     src/media/TrackMetadata.h
-    src/network/GequbaoParser.cpp
-    src/network/GequbaoParser.h
-    src/network/CurlHttpClient.cpp
-    src/network/CurlHttpClient.h
-    src/network/OnlineSongId.cpp
-    src/network/OnlineSongId.h
-    src/network/OnlineTrack.h
+    ${MUSICQUICK_APP_CONTROLLER_SOURCES}
 )
 
 target_compile_definitions(MusicQuickTests PRIVATE MUSICQUICK_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 target_include_directories(MusicQuickTests PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(MusicQuickTests PRIVATE Qt6::Test Qt6::Multimedia Qt6::Network)
+target_link_libraries(MusicQuickTests PRIVATE Qt6::Test Qt6::Multimedia Qt6::Network Qt6::Concurrent)
 
 add_test(NAME musicquick_core COMMAND MusicQuickTests)
+
+qt_add_executable(MusicQuickQmlTests
+    tests/test_playback_bar_qml.cpp
+    tests/MockPlaybackApp.h
+)
+
+target_compile_definitions(MusicQuickQmlTests PRIVATE MUSICQUICK_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_include_directories(MusicQuickQmlTests PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(MusicQuickQmlTests PRIVATE Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Test)
+add_dependencies(MusicQuickQmlTests MusicQuick)
+
+add_test(NAME musicquick_playback_bar_qml COMMAND MusicQuickQmlTests)
 endif()

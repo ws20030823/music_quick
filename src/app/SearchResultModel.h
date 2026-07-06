@@ -20,6 +20,7 @@ struct SearchResultEntry {
     QString detailUrl;
     QString streamUrl;
     QString coverUrl;
+    QString lyrics;
     TrackMetadata metadata;
     bool isPlaying = false;
     bool isSelected = false;
@@ -64,7 +65,10 @@ public:
 
     QString songIdAt(int row) const;
     QString streamUrlAt(int row) const;
-    void updateStreamUrl(int row, const QString& streamUrl, const QString& coverUrl);
+    void updateStreamUrl(int row,
+                         const QString& streamUrl,
+                         const QString& coverUrl,
+                         const QString& lyrics = {});
     void updateCover(int row, const QImage& cover);
     void setLikedSongIds(const QSet<QString>& songIds);
     void refreshLikedState(int row, bool liked);
