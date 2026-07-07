@@ -110,4 +110,16 @@ QtObject {
     readonly property int npTonearmAnimMs: 550
     readonly property real npTonearmPlayingDeg: 22
     readonly property real npTonearmRestDeg: -28
+
+    // ── 歌词面板（网易云风格）──
+    readonly property string npLyricFontFamily: "Microsoft YaHei UI"
+    readonly property color npLyricActive: "#222222"
+    readonly property color npLyricInactive: "#B2B2B2"
+    readonly property int npLyricActiveSize: 26
+    readonly property int npLyricInactiveSize: 17
+    readonly property int npLyricLineHeight: 52
+    readonly property int npLyricPaddingH: 32
+    readonly property int npLyricFadeHeight: 72
+    readonly property int npLyricScrollMs: 600
+    readonly property int npLyricAnimMs: 280
 }

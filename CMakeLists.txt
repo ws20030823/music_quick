@@ -122,6 +122,7 @@ qt_add_qml_module(MusicQuick
         qml/components/QueueDialog.qml
         qml/components/NowPlayingView.qml
         qml/components/VinylDisc.qml
+        qml/components/LyricsPanel.qml
         qml/pages/HomePage.qml
         qml/pages/LocalMusicPage.qml
         qml/pages/SearchPage.qml

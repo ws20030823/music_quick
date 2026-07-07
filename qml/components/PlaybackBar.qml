@@ -168,9 +168,18 @@ Rectangle {
 
 
 
+    MouseArea {
+        id: blankOpenLayer
+        objectName: "blankOpenLayer"
+        anchors.fill: parent
+        z: 0
+        onClicked: app.openNowPlaying()
+    }
+
     Item {
         id: contentHost
         anchors.fill: parent
+        z: 1
 
         RowLayout {
             anchors.fill: parent
@@ -620,19 +629,6 @@ Rectangle {
         }
 
     }
-
-    MouseArea {
-        id: blankOpenLayer
-        objectName: "blankOpenLayer"
-        anchors.fill: parent
-        z: 50
-        propagateComposedEvents: true
-        onClicked: function(mouse) {
-            openNowPlayingIfBlank(mouse.x, mouse.y)
-        }
-    }
-
-
 
     Connections {
 

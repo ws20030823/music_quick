@@ -262,50 +262,15 @@ Rectangle {
                 }
 
                 // 歌词面板
-                Item {
+                LyricsPanel {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.topMargin: 3
-                        radius: Theme.radiusLg
-                        color: Theme.npLyricsShadow
-                    }
-
-                    Rectangle {
-                        id: lyricsCard
-                        anchors.fill: parent
-                        radius: Theme.radiusLg
-                        color: Theme.npLyricsBg
-                        border.color: Theme.npBorder
-                        border.width: 1
-                        clip: true
-
-                        ScrollView {
-                            anchors.fill: parent
-                            clip: true
-                            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                            Column {
-                                width: lyricsCard.width
-                                spacing: 14
-                                topPadding: 28
-                                leftPadding: 28
-                                rightPadding: 28
-                                bottomPadding: 28
-
-                                Text {
-                                    width: parent.width - parent.leftPadding - parent.rightPadding
-                                    text: app.currentLyrics.length > 0 ? app.currentLyrics : qsTr("暂无歌词")
-                                    font.pixelSize: 16
-                                    lineHeight: 1.85
-                                    color: app.currentLyrics.length > 0 ? Theme.npText : Theme.npTextDim
-                                    horizontalAlignment: app.currentLyrics.length > 0 ? Text.AlignLeft : Text.AlignHCenter
-                                    wrapMode: Text.WordWrap
-                                }
-                            }
-                        }
+                    lyricsText: app.currentLyrics
+                    positionMs: app.position
+                    canSeek: app.canControl && app.duration > 0
+                    onLineClicked: function(timeMs) {
+                        if (app.canControl)
+                            app.seek(timeMs)
                     }
                 }
             }
