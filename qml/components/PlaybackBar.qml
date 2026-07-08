@@ -115,10 +115,14 @@ Rectangle {
         readonly property real _fillRatio: {
             if (control.from > control.to)
                 return control.value / control.from
+            // Qt vertical Slider already inverts visualPosition; do not invert again
+            if (control.orientation === Qt.Vertical)
+                return 1.0 - control.visualPosition
             return control.visualPosition
         }
 
         enabled: true
+        wheelEnabled: false
         opacity: interactive ? 1.0 : 0.55
 
         handle: Rectangle {
@@ -126,7 +130,7 @@ Rectangle {
                 ? control.leftPadding + control.availableWidth / 2 - width / 2
                 : control.leftPadding + control.visualPosition * (control.availableWidth - width)
             y: control.orientation === Qt.Vertical
-                ? control.topPadding + (1.0 - control.visualPosition) * (control.availableHeight - height)
+                ? control.topPadding + control.visualPosition * (control.availableHeight - height)
                 : control.topPadding + control.availableHeight / 2 - height / 2
             implicitWidth: 12
             implicitHeight: 12

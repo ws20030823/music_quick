@@ -8,10 +8,10 @@ import MusicQuick
 
 ApplicationWindow {
     id: root
-    width: 1180
-    height: 760
-    minimumWidth: 960
-    minimumHeight: 640
+    width: 1050
+    height: 720
+    minimumWidth: 900
+    minimumHeight: 620
     visible: true
     title: qsTr("Music Quick")
     color: Theme.bgBase
@@ -25,11 +25,8 @@ ApplicationWindow {
         onAccepted: app.importFiles(selectedFiles)
     }
 
-    function goToPage(page) {
-        app.currentPage = page
-        if (page !== 3) {
-            app.activePlaylistId = ""
-        }
+    function navigateTo(page) {
+        app.navigateToPage(page)
     }
 
     ColumnLayout {
@@ -43,7 +40,7 @@ ApplicationWindow {
             window: root
             onSearchSubmitted: function(keyword) {
                 app.searchOnline(keyword, 1)
-                root.goToPage(2)
+                root.navigateTo(2)
             }
         }
 
@@ -66,7 +63,7 @@ ApplicationWindow {
                 Layout.minimumWidth: Theme.sidebarWidth
                 Layout.fillHeight: true
                 currentPage: app.currentPage
-                onNavigate: function(page) { root.goToPage(page) }
+                onNavigate: function(page) { root.navigateTo(page) }
             }
 
             StackLayout {
@@ -74,15 +71,15 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 currentIndex: app.currentPage
 
-                HomePage {
-                    onOpenLocalMusic: root.goToPage(1)
-                }
+                HomePage { }
                 LocalMusicPage {
                     trackModel: app.trackModel
                     onImportClicked: importDialog.open()
                 }
                 SearchPage { }
                 PlaylistPage { }
+                FeaturedPlaylistPage { }
+                SettingsPage { }
             }
         }
 

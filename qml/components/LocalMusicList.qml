@@ -183,7 +183,8 @@ Item {
             MouseArea {
                 id: rowMouse
                 anchors.fill: parent
-                anchors.rightMargin: Theme.searchLikeWidth + 8
+                anchors.rightMargin: Theme.searchLikeWidth + Theme.searchDurationWidth
+                                               + Theme.searchFileSizeWidth + 24
                 hoverEnabled: true
                 onClicked: root.rowSelected(index)
                 onDoubleClicked: root.rowActivated(index)

@@ -9,6 +9,8 @@
 //   - 通过 Q_PROPERTY / Q_INVOKABLE 暴露给 QML（contextProperty 名 "app"）
 // =============================================================================
 
+#include "app/FeaturedPlaylistCatalog.h"
+#include "app/FeaturedPlaylistCacheStore.h"
 #include "app/PlaylistStore.h"
 #include "app/PlaylistTrackModel.h"
 #include "app/SearchResultModel.h"
@@ -20,6 +22,7 @@
 #include "network/OnlineTrack.h"
 #include "network/StreamFetchOptions.h"
 
+#include <QHash>
 #include <QImage>
 #include <QNetworkAccessManager>
 #include <QObject>
@@ -81,6 +84,17 @@ class AppController final : public QObject
     Q_PROPERTY(QString activeMusicSourceName READ activeMusicSourceName NOTIFY activeMusicSourceChanged)
     Q_PROPERTY(QVariantList musicSources READ musicSources CONSTANT)
 
+    Q_PROPERTY(QVariantList featuredPlaylists READ featuredPlaylists CONSTANT)
+    Q_PROPERTY(QVariantList favoriteFeaturedPlaylists READ favoriteFeaturedPlaylists NOTIFY favoriteFeaturedPlaylistsChanged)
+    Q_PROPERTY(QString activeFeaturedPlaylistId READ activeFeaturedPlaylistId NOTIFY activeFeaturedPlaylistChanged)
+    Q_PROPERTY(QString activeFeaturedPlaylistTitle READ activeFeaturedPlaylistTitle NOTIFY activeFeaturedPlaylistChanged)
+    Q_PROPERTY(QString activeFeaturedPlaylistSubtitle READ activeFeaturedPlaylistSubtitle NOTIFY activeFeaturedPlaylistChanged)
+    Q_PROPERTY(QString activeFeaturedPlaylistCoverUrl READ activeFeaturedPlaylistCoverUrl NOTIFY activeFeaturedPlaylistChanged)
+    Q_PROPERTY(bool activeFeaturedPlaylistFavorited READ activeFeaturedPlaylistFavorited NOTIFY activeFeaturedPlaylistChanged)
+
+    Q_PROPERTY(bool canNavigateBack READ canNavigateBack NOTIFY canNavigateBackChanged)
+
+
 public:
     explicit AppController(QObject* parent = nullptr);
     ~AppController() override;
@@ -136,6 +150,15 @@ public:
     int activePlaylistTrackCount() const;
     int likedTrackCount() const;
 
+    QVariantList featuredPlaylists() const;
+    QVariantList favoriteFeaturedPlaylists() const;
+    QString activeFeaturedPlaylistId() const;
+    QString activeFeaturedPlaylistTitle() const;
+    QString activeFeaturedPlaylistSubtitle() const;
+    QString activeFeaturedPlaylistCoverUrl() const;
+    bool activeFeaturedPlaylistFavorited() const;
+    bool canNavigateBack() const;
+
     QString activeMusicSourceId() const;
     void setActiveMusicSourceId(const QString& id);
     QString activeMusicSourceName() const;
@@ -170,6 +193,13 @@ public:
     Q_INVOKABLE QString createPlaylist(const QString& name);
     Q_INVOKABLE bool deletePlaylist(const QString& id);
     Q_INVOKABLE void openPlaylist(const QString& id);
+    Q_INVOKABLE void openFeaturedPlaylist(const QString& id);
+    Q_INVOKABLE void toggleFavoriteFeaturedPlaylist();
+    Q_INVOKABLE bool isFeaturedPlaylistFavorited(const QString& id) const;
+
+    Q_INVOKABLE void navigateToPage(int page);
+    Q_INVOKABLE void navigateBack();
+
     Q_INVOKABLE void refreshActivePlaylist();
     Q_INVOKABLE void playPlaylistRow(int row);
     Q_INVOKABLE void removePlaylistTrack(int row);
@@ -202,6 +232,9 @@ signals:
     void activePlaylistIdChanged();
     void activePlaylistContentChanged();
     void activeMusicSourceChanged();
+    void favoriteFeaturedPlaylistsChanged();
+    void activeFeaturedPlaylistChanged();
+    void canNavigateBackChanged();
 
 private slots:
     void onSearchCompleted(const SearchPageResult& result, const QString& keyword);
@@ -226,10 +259,31 @@ private:
     void setSearchBusy(bool busy);
     void setSearchStatus(const QString& text);
     void applySearchPageResult(const SearchPageResult& result);
-    void downloadSearchCover(int row, const QUrl& coverUrl);
+    void downloadNowPlayingCover(const QUrl& coverUrl, const QString& songId = {});
+    void beginOnlinePlaybackUi(const QString& subtitle);
+    void queueSearchStreamPrefetch();
+    void startNextStreamPrefetch();
+    void cancelStreamUrlPrefetch();
     void syncSearchLikedStates();
     void syncLocalLikedStates();
     void syncPlaylistLikedStates();
+    void searchFeaturedPlaylist(const QString& keyword, int page);
+    void requestFeaturedSearch(const QString& playlistId,
+                               const QString& keyword,
+                               int page,
+                               bool applyToUi);
+    void prefetchFeaturedPlaylists();
+    void startNextFeaturedPrefetch();
+    bool hasFeaturedCache(const QString& playlistId, int page) const;
+    const SearchPageResult* featuredCache(const QString& playlistId, int page) const;
+    void storeFeaturedCache(const QString& playlistId, int page, const SearchPageResult& result);
+    void applyFeaturedCacheToUi(const QString& playlistId, int page);
+    QString featuredSearchStatusText(const SearchPageResult& result) const;
+    QString activeFeaturedKeyword() const;
+    void pushNavState();
+    void loadFavoriteFeaturedPlaylists();
+    void saveFavoriteFeaturedPlaylists() const;
+
     void reloadActivePlaylistModel();
     PlaylistTrackRef trackRefFromSearchRow(int row) const;
     PlaylistTrackRef trackRefFromLocalRow(int row) const;
@@ -245,6 +299,19 @@ private:
     bool isPendingOnlinePlaylistRow(int row) const;
 
     enum class OnlineQueueType { None, Search, Playlist };
+
+    struct FeaturedSearchRequest {
+        QString playlistId;
+        QString keyword;
+        int page = 1;
+        bool applyToUi = false;
+    };
+
+    struct NavSnapshot {
+        int page = 0;
+        QString featuredPlaylistId;
+        QString playlistId;
+    };
 
     TrackListModel m_trackModel;
     SearchResultModel m_searchResultModel;
@@ -292,10 +359,28 @@ private:
     bool m_searchHasPrevious = false;
 
     QString m_activePlaylistId;
+    QString m_activeFeaturedPlaylistId;
+    QStringList m_favoriteFeaturedPlaylistIds;
+
+    QHash<QString, QHash<int, SearchPageResult>> m_featuredPlaylistCache;
+    QStringList m_featuredPrefetchQueue;
+    FeaturedSearchRequest m_inFlightFeaturedSearch;
+    bool m_featuredSearchInFlight = false;
+    bool m_hasPendingFeaturedUiRequest = false;
+    FeaturedSearchRequest m_pendingFeaturedUiRequest;
+
+    QVector<NavSnapshot> m_navBackStack;
+    bool m_navigatingBack = false;
+
     int m_pendingPlaylistRow = -1;
     QString m_activeMusicSourceId = QStringLiteral("myfreemp3");
     QVariantList m_musicSources;
 
     OnlineQueueType m_onlineQueueType = OnlineQueueType::None;
     int m_onlineQueueRow = -1;
+
+    QList<int> m_streamPrefetchQueue;
+    bool m_streamPrefetchInFlight = false;
+    int m_activeStreamPrefetchRow = -1;
+    static constexpr int kStreamPrefetchCount = 3;
 };

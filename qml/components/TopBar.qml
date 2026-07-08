@@ -115,9 +115,11 @@ Rectangle {
             ToolButton {
                 implicitWidth: 32
                 implicitHeight: 32
-                enabled: false
-                opacity: 0.4
+                enabled: app.canNavigateBack
+                opacity: enabled ? 1 : 0.4
                 Layout.alignment: Qt.AlignVCenter
+                ToolTip.text: qsTr("返回")
+                onClicked: app.navigateBack()
                 background: Rectangle {
                     radius: 8
                     color: parent.hovered ? Theme.bgHover : Theme.bgCard
@@ -283,7 +285,26 @@ Rectangle {
             }
         }
 
-        // ── 窗口控制：外层 RowLayout 最后一项，始终贴右 ──
+        // ── 窗口控制：设置 + 系统按钮 ──
+        ToolButton {
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            Layout.rightMargin: 4
+            implicitWidth: 32
+            implicitHeight: 32
+            ToolTip.text: qsTr("设置")
+            onClicked: app.navigateToPage(5)
+            background: Rectangle {
+                radius: 8
+                color: parent.hovered ? Theme.bgHover : "transparent"
+            }
+            contentItem: AppIcon {
+                name: Icons.settings
+                size: 16
+                color: Theme.textSecondary
+                anchors.centerIn: parent
+            }
+        }
+
         WindowControls {
             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             window: root.window

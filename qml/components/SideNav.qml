@@ -37,14 +37,31 @@ Rectangle {
             spacing: 4
 
             SectionLabel { title: qsTr("发现") }
-            NavButton { label: qsTr("推荐"); page: 0; playlistId: "" }
+            NavButton { label: qsTr("推荐"); page: 0; playlistId: ""; featuredPlaylistId: "" }
 
             SectionLabel { title: qsTr("我的音乐") }
-            NavButton { label: qsTr("本地音乐"); page: 1; playlistId: "" }
+            NavButton { label: qsTr("本地音乐"); page: 1; playlistId: ""; featuredPlaylistId: "" }
             NavButton {
                 label: qsTr("最近播放")
                 page: -1
                 enabled: false
+            }
+
+            SectionLabel {
+                visible: app.favoriteFeaturedPlaylists.length > 0
+                title: qsTr("收藏歌单")
+            }
+
+            Repeater {
+                model: app.favoriteFeaturedPlaylists
+                delegate: NavButton {
+                    required property var modelData
+                    label: modelData.title
+                    page: 4
+                    playlistId: ""
+                    featuredPlaylistId: modelData.id
+                    subtitle: modelData.subtitle
+                }
             }
 
             Row {
@@ -115,6 +132,7 @@ Rectangle {
         property string label
         property int page
         property string playlistId: ""
+        property string featuredPlaylistId: ""
         property string subtitle: ""
         property bool showDelete: false
         signal deleteClicked()
@@ -124,11 +142,16 @@ Rectangle {
         opacity: enabled ? 1 : 0.45
         flat: true
         checkable: enabled
-        checked: enabled && root.currentPage === page && app.activePlaylistId === playlistId
+        checked: enabled && root.currentPage === page
+                 && ((featuredPlaylistId !== "" && app.activeFeaturedPlaylistId === featuredPlaylistId)
+                     || (featuredPlaylistId === "" && playlistId === "" && app.activeFeaturedPlaylistId === "")
+                     || (playlistId !== "" && app.activePlaylistId === playlistId))
         onClicked: {
             if (page < 0)
                 return
-            if (playlistId !== "") {
+            if (featuredPlaylistId !== "") {
+                app.openFeaturedPlaylist(featuredPlaylistId)
+            } else if (playlistId !== "") {
                 app.openPlaylist(playlistId)
             } else {
                 root.navigate(page)

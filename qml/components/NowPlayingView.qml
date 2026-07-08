@@ -291,13 +291,18 @@ Rectangle {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 20
-                anchors.rightMargin: 20
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
                 spacing: 16
 
+                Item {
+                    Layout.preferredWidth: 280
+                    Layout.maximumWidth: 320
+                    Layout.fillHeight: true
+                    Layout.alignment: Qt.AlignVCenter
+
                 RowLayout {
-                    Layout.preferredWidth: 300
-                    Layout.maximumWidth: 340
+                    anchors.fill: parent
                     spacing: 12
 
                     Rectangle {
@@ -336,35 +341,29 @@ Rectangle {
                             Layout.fillWidth: true
                         }
                         Text {
-                            text: app.currentArtist || qsTr("—")
+                            text: app.currentArtist || app.currentSubtitle || qsTr("请导入并选择歌曲")
                             font.pixelSize: 12
                             color: Theme.npTextMuted
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                         }
                     }
-
-                    NpIconButton {
-                        iconName: app.isCurrentTrackLiked ? Icons.heartFilled : Icons.heart
-                        iconSize: 16
-                        enabled: app.currentSongId.length > 0
-                        onClicked: app.toggleCurrentLike()
-                        contentItem: AppIcon {
-                            name: app.isCurrentTrackLiked ? Icons.heartFilled : Icons.heart
-                            size: 16
-                            color: app.isCurrentTrackLiked ? Theme.accent : Theme.npTextMuted
-                            anchors.centerIn: parent
-                        }
-                    }
                 }
 
-                ColumnLayout {
+                }
+
+                Item {
                     Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.alignment: Qt.AlignVCenter
+
+                ColumnLayout {
+                    anchors.fill: parent
                     spacing: 6
 
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
-                        spacing: 16
+                        spacing: 12
 
                         NpIconButton {
                             iconName: Icons.modeIconName(app.playbackMode)
@@ -402,16 +401,11 @@ Rectangle {
                             enabled: app.canControl
                             onClicked: { if (app.canControl) app.playNext() }
                         }
-                        NpIconButton {
-                            iconName: Icons.playlist
-                            enabled: app.canControl
-                            onClicked: { if (app.canControl) app.queueVisible = true }
-                        }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.maximumWidth: 520
+                        Layout.maximumWidth: 560
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 8
 
@@ -450,8 +444,13 @@ Rectangle {
                     }
                 }
 
+                }
+
                 RowLayout {
-                    Layout.preferredWidth: 72
+                    Layout.preferredWidth: 88
+                    Layout.maximumWidth: 100
+                    Layout.fillHeight: true
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     spacing: 4
 
                     Item {
@@ -518,6 +517,12 @@ Rectangle {
                                 }
                             }
                         }
+                    }
+
+                    NpIconButton {
+                        iconName: Icons.playlist
+                        enabled: app.trackCount > 0
+                        onClicked: { if (app.trackCount > 0) app.queueVisible = true }
                     }
                 }
             }

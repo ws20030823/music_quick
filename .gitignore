@@ -30,6 +30,9 @@ Makefile
 .vscode/
 .idea/
 
+# 本地媒体缓存（默认在程序目录 cache/）
+cache/
+
 # 系統
 .DS_Store
 Thumbs.db

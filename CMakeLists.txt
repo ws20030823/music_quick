@@ -36,6 +36,10 @@ qt_add_executable(MusicQuick
     src/media/TrackMetadata.h
     src/app/AppController.cpp
     src/app/AppController.h
+    src/app/FeaturedPlaylistCatalog.cpp
+    src/app/FeaturedPlaylistCatalog.h
+    src/app/FeaturedPlaylistCacheStore.cpp
+    src/app/FeaturedPlaylistCacheStore.h
     src/app/CoverImageProvider.cpp
     src/app/CoverImageProvider.h
     src/app/TrackListModel.cpp
@@ -46,6 +50,8 @@ qt_add_executable(MusicQuick
     src/app/PlaylistStore.h
     src/app/PlaylistTrackModel.cpp
     src/app/PlaylistTrackModel.h
+    src/app/MediaCacheManager.cpp
+    src/app/MediaCacheManager.h
     src/network/MyFreeMp3Parser.cpp
     src/network/MyFreeMp3Parser.h
     src/network/MyFreeMp3Client.cpp
@@ -72,7 +78,7 @@ set(MUSICQUICK_ICON_NAMES
     play.svg pause.svg prev.svg next.svg
     shuffle.svg repeat-all.svg repeat-one.svg
     playlist.svg volume.svg
-    heart.svg heart-filled.svg folder-plus.svg
+    heart.svg heart-filled.svg folder-plus.svg settings.svg
     search.svg chevron-left.svg mic.svg
     minimize.svg maximize.svg restore.svg close.svg
 )
@@ -103,6 +109,28 @@ qt_add_resources(MusicQuick "nowplaying_assets"
     FILES ${MUSICQUICK_NOWPLAYING_FILES}
 )
 
+set(MUSICQUICK_IMAGES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/images")
+set(MUSICQUICK_FEATURED_COVER_NAMES
+    xue-zhiqian.jpg
+    jay-chou.jpg
+    eason.jpg
+    gem.jpg
+    zhao-lei.jpg
+    wang-leehom.jpg
+    jj-lin.jpg
+    liang-bo.jpg
+)
+set(MUSICQUICK_FEATURED_COVER_FILES "")
+foreach(_cover IN LISTS MUSICQUICK_FEATURED_COVER_NAMES)
+    set(_cover_path "${MUSICQUICK_IMAGES_DIR}/${_cover}")
+    set_source_files_properties("${_cover_path}" PROPERTIES QT_RESOURCE_ALIAS "${_cover}")
+    list(APPEND MUSICQUICK_FEATURED_COVER_FILES "${_cover_path}")
+endforeach()
+qt_add_resources(MusicQuick "featured_covers"
+    PREFIX "/images"
+    FILES ${MUSICQUICK_FEATURED_COVER_FILES}
+)
+
 qt_add_qml_module(MusicQuick
     URI MusicQuick
     VERSION 1.0
@@ -123,11 +151,14 @@ qt_add_qml_module(MusicQuick
         qml/components/NowPlayingView.qml
         qml/components/VinylDisc.qml
         qml/components/LyricsPanel.qml
+        qml/components/FeaturedPlaylistCard.qml
         qml/pages/HomePage.qml
         qml/pages/LocalMusicPage.qml
         qml/pages/SearchPage.qml
         qml/pages/PlaylistPage.qml
-)
+        qml/pages/FeaturedPlaylistPage.qml
+        qml/pages/SettingsPage.qml
+    )
 
 target_include_directories(MusicQuick PRIVATE "${CMAKE_SOURCE_DIR}/src")
 
@@ -148,6 +179,10 @@ if(NOT ANDROID)
 set(MUSICQUICK_APP_CONTROLLER_SOURCES
     src/app/AppController.cpp
     src/app/AppController.h
+    src/app/FeaturedPlaylistCatalog.cpp
+    src/app/FeaturedPlaylistCatalog.h
+    src/app/FeaturedPlaylistCacheStore.cpp
+    src/app/FeaturedPlaylistCacheStore.h
     src/app/PlaylistStore.cpp
     src/app/PlaylistStore.h
     src/app/PlaylistTrackModel.cpp

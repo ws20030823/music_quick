@@ -1,4 +1,4 @@
-// SearchResultList.qml — 网易云风格搜索结果表格（封面/标题/专辑/喜欢/时长 + 右键菜单）
+// SearchResultList.qml — 网易云风格搜索结果表格（标题/专辑/喜欢/时长 + 右键菜单）
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -85,8 +85,6 @@ Item {
                 required property string artist
                 required property string album
                 required property string duration
-                required property bool hasCover
-                required property var cover
                 required property bool isPlaying
                 required property bool isLiked
                 required property bool isSelected
@@ -125,51 +123,24 @@ Item {
                         }
                     }
 
-                    // 封面 + 标题 + 歌手
-                    RowLayout {
+                    // 标题 + 歌手
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 10
+                        spacing: 2
 
-                        Rectangle {
-                            width: Theme.listCoverSize
-                            height: Theme.listCoverSize
-                            radius: 4
-                            color: Theme.bgSidebar
-                            clip: true
-
-                            Image {
-                                anchors.fill: parent
-                                source: hasCover ? cover : ""
-                                fillMode: Image.PreserveAspectCrop
-                                visible: hasCover
-                            }
-                            AppIcon {
-                                anchors.centerIn: parent
-                                visible: !hasCover
-                                name: Icons.play
-                                size: 16
-                                color: Theme.textTertiary
-                            }
-                        }
-
-                        ColumnLayout {
+                        Text {
+                            text: title
+                            font.pixelSize: 14
+                            color: isPlaying || isSelected ? Theme.accent : Theme.textPrimary
+                            elide: Text.ElideRight
                             Layout.fillWidth: true
-                            spacing: 2
-
-                            Text {
-                                text: title
-                                font.pixelSize: 14
-                                color: isPlaying || isSelected ? Theme.accent : Theme.textPrimary
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                            Text {
-                                text: artist
-                                font.pixelSize: 12
-                                color: Theme.textSecondary
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
+                        }
+                        Text {
+                            text: artist
+                            font.pixelSize: 12
+                            color: Theme.textSecondary
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
                         }
                     }
 
@@ -212,7 +183,8 @@ Item {
                 MouseArea {
                     id: rowMouse
                     anchors.fill: parent
-                    anchors.rightMargin: Theme.searchLikeWidth + 8
+                    // 排除「喜欢 + 时长」列，避免拦截爱心按钮点击
+                    anchors.rightMargin: Theme.searchLikeWidth + Theme.searchDurationWidth + 12
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     onClicked: function(mouse) {

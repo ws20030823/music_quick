@@ -35,6 +35,7 @@ QtObject {
     readonly property string search: "search"
     readonly property string chevronLeft: "chevron-left"
     readonly property string mic: "mic"
+    readonly property string settings: "settings"
 
     // 返回 qrc 路径
     function url(name) {

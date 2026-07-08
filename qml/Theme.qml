@@ -122,4 +122,13 @@ QtObject {
     readonly property int npLyricFadeHeight: 72
     readonly property int npLyricScrollMs: 600
     readonly property int npLyricAnimMs: 280
+
+    // ── 首页歌单卡片 ──
+    readonly property int cardCoverRadius: 12
+    readonly property color cardShadow: "#14000000"
+    readonly property int cardHoverLift: 5
+    readonly property int cardCoverHoverScaleMs: 300
+
+    // 无障碍：后续可绑定 SystemSettings 或平台 reduced-motion
+    readonly property bool reduceMotion: false
 }

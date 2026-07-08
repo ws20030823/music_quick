@@ -31,9 +31,10 @@ public:
                           const QString& artist = {}) override;
     void cancelResolveStreamUrl() override;
 
+    static CurlHttpClient::HeaderList documentHeaders(const QString& referer);
+
 private:
     static QString userAgent();
-    static CurlHttpClient::HeaderList documentHeaders(const QString& referer);
     static CurlHttpClient::HeaderList apiHeaders(const QString& referer);
     static QUrl buildSearchUrl(const QString& keyword, int page);
 

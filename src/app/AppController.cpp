@@ -12,6 +12,8 @@
 #include <QFileInfo>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QSettings>
+#include <QTimer>
 #include <QUrl>
 
 namespace {
@@ -155,8 +157,11 @@ AppController::AppController(QObject* parent)
 
     m_activePlaylistId = QStringLiteral("liked");
     reloadActivePlaylistModel();
+    loadFavoriteFeaturedPlaylists();
     syncLocalLikedStates();
     syncPlaylistLikedStates();
+
+    QTimer::singleShot(300, this, &AppController::prefetchFeaturedPlaylists);
 }
 
 AppController::~AppController() = default;
@@ -190,6 +195,10 @@ void AppController::setCurrentPage(int page)
     emit currentPageChanged();
     if (page == 3 && !m_activePlaylistId.isEmpty()) {
         reloadActivePlaylistModel();
+    }
+    if (page != 4 && !m_activeFeaturedPlaylistId.isEmpty() && !m_navigatingBack) {
+        m_activeFeaturedPlaylistId.clear();
+        emit activeFeaturedPlaylistChanged();
     }
 }
 
@@ -345,6 +354,315 @@ int AppController::likedTrackCount() const
     return m_playlistStore.trackCount(QStringLiteral("liked"));
 }
 
+QVariantList AppController::featuredPlaylists() const
+{
+    QVariantList items;
+    for (const FeaturedPlaylist& playlist : FeaturedPlaylistCatalog::all()) {
+        QVariantMap map;
+        map.insert(QStringLiteral("id"), playlist.id);
+        map.insert(QStringLiteral("title"), playlist.title);
+        map.insert(QStringLiteral("subtitle"), playlist.subtitle);
+        map.insert(QStringLiteral("keyword"), playlist.keyword);
+        map.insert(QStringLiteral("coverUrl"), playlist.coverUrl);
+        map.insert(QStringLiteral("sourceId"), playlist.sourceId);
+        items.append(map);
+    }
+    return items;
+}
+
+QVariantList AppController::favoriteFeaturedPlaylists() const
+{
+    QVariantList items;
+    for (const QString& id : m_favoriteFeaturedPlaylistIds) {
+        const FeaturedPlaylist* playlist = FeaturedPlaylistCatalog::find(id);
+        if (!playlist) {
+            continue;
+        }
+        QVariantMap map;
+        map.insert(QStringLiteral("id"), playlist->id);
+        map.insert(QStringLiteral("title"), playlist->title);
+        map.insert(QStringLiteral("subtitle"), playlist->subtitle);
+        map.insert(QStringLiteral("coverUrl"), playlist->coverUrl);
+        items.append(map);
+    }
+    return items;
+}
+
+QString AppController::activeFeaturedPlaylistId() const
+{
+    return m_activeFeaturedPlaylistId;
+}
+
+QString AppController::activeFeaturedPlaylistTitle() const
+{
+    const FeaturedPlaylist* playlist = FeaturedPlaylistCatalog::find(m_activeFeaturedPlaylistId);
+    return playlist ? playlist->title : QString();
+}
+
+QString AppController::activeFeaturedPlaylistSubtitle() const
+{
+    const FeaturedPlaylist* playlist = FeaturedPlaylistCatalog::find(m_activeFeaturedPlaylistId);
+    return playlist ? playlist->subtitle : QString();
+}
+
+QString AppController::activeFeaturedPlaylistCoverUrl() const
+{
+    const FeaturedPlaylist* playlist = FeaturedPlaylistCatalog::find(m_activeFeaturedPlaylistId);
+    return playlist ? playlist->coverUrl : QString();
+}
+
+bool AppController::activeFeaturedPlaylistFavorited() const
+{
+    return isFeaturedPlaylistFavorited(m_activeFeaturedPlaylistId);
+}
+
+bool AppController::isFeaturedPlaylistFavorited(const QString& id) const
+{
+    return !id.isEmpty() && m_favoriteFeaturedPlaylistIds.contains(id);
+}
+
+void AppController::loadFavoriteFeaturedPlaylists()
+{
+    QSettings settings;
+    m_favoriteFeaturedPlaylistIds = settings.value(QStringLiteral("favoriteFeaturedPlaylists")).toStringList();
+}
+
+void AppController::saveFavoriteFeaturedPlaylists() const
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("favoriteFeaturedPlaylists"), m_favoriteFeaturedPlaylistIds);
+}
+
+void AppController::searchFeaturedPlaylist(const QString& keyword, int page)
+{
+    if (m_activeFeaturedPlaylistId.isEmpty()) {
+        return;
+    }
+
+    const QString playlistId = m_activeFeaturedPlaylistId;
+    if (hasFeaturedCache(playlistId, page)) {
+        applyFeaturedCacheToUi(playlistId, page);
+        return;
+    }
+
+    requestFeaturedSearch(playlistId, keyword, page, true);
+}
+
+bool AppController::hasFeaturedCache(const QString& playlistId, int page) const
+{
+    const auto playlistIt = m_featuredPlaylistCache.constFind(playlistId);
+    if (playlistIt != m_featuredPlaylistCache.constEnd() && playlistIt->contains(page)) {
+        return true;
+    }
+    return FeaturedPlaylistCacheStore::exists(playlistId, page);
+}
+
+const SearchPageResult* AppController::featuredCache(const QString& playlistId, int page) const
+{
+    const auto playlistIt = m_featuredPlaylistCache.constFind(playlistId);
+    if (playlistIt == m_featuredPlaylistCache.constEnd()) {
+        return nullptr;
+    }
+    const auto pageIt = playlistIt->constFind(page);
+    if (pageIt == playlistIt->constEnd()) {
+        return nullptr;
+    }
+    return &(*pageIt);
+}
+
+void AppController::storeFeaturedCache(const QString& playlistId,
+                                       int page,
+                                       const SearchPageResult& result)
+{
+    m_featuredPlaylistCache[playlistId][page] = result;
+    FeaturedPlaylistCacheStore::save(playlistId, page, result);
+}
+
+void AppController::applyFeaturedCacheToUi(const QString& playlistId, int page)
+{
+    if (!featuredCache(playlistId, page)) {
+        if (const auto loaded = FeaturedPlaylistCacheStore::load(playlistId, page)) {
+            m_featuredPlaylistCache[playlistId][page] = *loaded;
+        }
+    }
+
+    const SearchPageResult* cached = featuredCache(playlistId, page);
+    if (!cached) {
+        return;
+    }
+
+    const FeaturedPlaylist* playlist = FeaturedPlaylistCatalog::find(playlistId);
+    if (playlist) {
+        m_searchKeyword = playlist->keyword;
+        emit searchKeywordChanged();
+    }
+
+    applySearchPageResult(*cached);
+    setSearchBusy(false);
+    setSearchStatus(featuredSearchStatusText(*cached));
+}
+
+QString AppController::featuredSearchStatusText(const SearchPageResult& result) const
+{
+    if (result.tracks.isEmpty()) {
+        return QStringLiteral("暂无歌曲，请稍后再试");
+    }
+    return QStringLiteral("共 %1 首 · 第 %2 页")
+        .arg(result.tracks.size())
+        .arg(result.currentPage);
+}
+
+void AppController::requestFeaturedSearch(const QString& playlistId,
+                                          const QString& keyword,
+                                          int page,
+                                          bool applyToUi)
+{
+    const QString trimmed = keyword.trimmed();
+    if (trimmed.isEmpty() || playlistId.isEmpty()) {
+        if (applyToUi) {
+            setSearchStatus(QStringLiteral("歌单关键词无效"));
+        }
+        return;
+    }
+
+    if (m_featuredSearchInFlight) {
+        if (applyToUi) {
+            m_pendingFeaturedUiRequest = {playlistId, trimmed, page, true};
+            m_hasPendingFeaturedUiRequest = true;
+        } else if (!m_featuredPrefetchQueue.contains(playlistId)) {
+            m_featuredPrefetchQueue.append(playlistId);
+        }
+        return;
+    }
+
+    m_featuredSearchInFlight = true;
+    m_inFlightFeaturedSearch = {playlistId, trimmed, page, applyToUi};
+
+    if (applyToUi) {
+        m_searchKeyword = trimmed;
+        emit searchKeywordChanged();
+        setSearchBusy(true);
+        setSearchStatus(QStringLiteral("正在从歌曲宝加载…"));
+    }
+
+    MusicSourceClient* client = m_sourceRegistry.source(QStringLiteral("gequbao"));
+    if (!client) {
+        m_featuredSearchInFlight = false;
+        if (applyToUi) {
+            setSearchBusy(false);
+            setSearchStatus(QStringLiteral("未找到歌曲宝来源"));
+        }
+        startNextFeaturedPrefetch();
+        return;
+    }
+
+    client->search(trimmed, page);
+}
+
+void AppController::prefetchFeaturedPlaylists()
+{
+    for (const FeaturedPlaylist& playlist : FeaturedPlaylistCatalog::all()) {
+        if (hasFeaturedCache(playlist.id, 1)) {
+            continue;
+        }
+        if (!m_featuredPrefetchQueue.contains(playlist.id)) {
+            m_featuredPrefetchQueue.append(playlist.id);
+        }
+    }
+    startNextFeaturedPrefetch();
+}
+
+void AppController::startNextFeaturedPrefetch()
+{
+    if (m_featuredSearchInFlight) {
+        return;
+    }
+
+    while (!m_featuredPrefetchQueue.isEmpty()) {
+        const QString playlistId = m_featuredPrefetchQueue.takeFirst();
+        if (hasFeaturedCache(playlistId, 1)) {
+            continue;
+        }
+
+        const FeaturedPlaylist* playlist = FeaturedPlaylistCatalog::find(playlistId);
+        if (!playlist) {
+            continue;
+        }
+
+        requestFeaturedSearch(playlistId, playlist->keyword, 1, false);
+        return;
+    }
+}
+
+bool AppController::canNavigateBack() const
+{
+    return !m_navBackStack.isEmpty();
+}
+
+void AppController::pushNavState()
+{
+    if (m_navigatingBack) {
+        return;
+    }
+
+    NavSnapshot snapshot;
+    snapshot.page = m_currentPage;
+    snapshot.featuredPlaylistId = m_activeFeaturedPlaylistId;
+    snapshot.playlistId = m_activePlaylistId;
+    m_navBackStack.append(snapshot);
+    emit canNavigateBackChanged();
+}
+
+void AppController::navigateToPage(int page)
+{
+    if (page == m_currentPage) {
+        return;
+    }
+
+    pushNavState();
+
+    if (page != 3) {
+        setActivePlaylistId(QString());
+    }
+
+    setCurrentPage(page);
+}
+
+void AppController::navigateBack()
+{
+    if (m_navBackStack.isEmpty()) {
+        return;
+    }
+
+    const NavSnapshot previous = m_navBackStack.takeLast();
+    emit canNavigateBackChanged();
+
+    m_navigatingBack = true;
+
+    m_activeFeaturedPlaylistId = previous.featuredPlaylistId;
+    emit activeFeaturedPlaylistChanged();
+
+    if (m_activePlaylistId != previous.playlistId) {
+        setActivePlaylistId(previous.playlistId);
+    }
+
+    setCurrentPage(previous.page);
+
+    if (previous.page == 4 && !previous.featuredPlaylistId.isEmpty()) {
+        if (hasFeaturedCache(previous.featuredPlaylistId, 1)) {
+            applyFeaturedCacheToUi(previous.featuredPlaylistId, 1);
+        } else {
+            const FeaturedPlaylist* playlist = FeaturedPlaylistCatalog::find(previous.featuredPlaylistId);
+            if (playlist) {
+                searchFeaturedPlaylist(playlist->keyword, 1);
+            }
+        }
+    }
+
+    m_navigatingBack = false;
+}
+
+
 QString AppController::activeMusicSourceId() const
 {
     return m_activeMusicSourceId;
@@ -442,7 +760,18 @@ void AppController::searchOnline(const QString& keyword, int page)
 
 void AppController::searchNextPage()
 {
-    if (!m_searchHasNext || m_searchKeyword.isEmpty()) {
+    if (!m_searchHasNext) {
+        return;
+    }
+    if (!m_activeFeaturedPlaylistId.isEmpty()) {
+        const QString keyword = activeFeaturedKeyword();
+        if (keyword.isEmpty()) {
+            return;
+        }
+        searchFeaturedPlaylist(keyword, m_searchCurrentPage + 1);
+        return;
+    }
+    if (m_searchKeyword.isEmpty()) {
         return;
     }
     searchOnline(m_searchKeyword, m_searchCurrentPage + 1);
@@ -450,10 +779,27 @@ void AppController::searchNextPage()
 
 void AppController::searchPreviousPage()
 {
-    if (!m_searchHasPrevious || m_searchKeyword.isEmpty()) {
+    if (!m_searchHasPrevious) {
+        return;
+    }
+    if (!m_activeFeaturedPlaylistId.isEmpty()) {
+        const QString keyword = activeFeaturedKeyword();
+        if (keyword.isEmpty()) {
+            return;
+        }
+        searchFeaturedPlaylist(keyword, m_searchCurrentPage - 1);
+        return;
+    }
+    if (m_searchKeyword.isEmpty()) {
         return;
     }
     searchOnline(m_searchKeyword, m_searchCurrentPage - 1);
+}
+
+QString AppController::activeFeaturedKeyword() const
+{
+    const FeaturedPlaylist* playlist = FeaturedPlaylistCatalog::find(m_activeFeaturedPlaylistId);
+    return playlist ? playlist->keyword : QString();
 }
 
 void AppController::applySearchPageResult(const SearchPageResult& result)
@@ -464,7 +810,9 @@ void AppController::applySearchPageResult(const SearchPageResult& result)
         SearchResultEntry entry;
         entry.songId = track.songId;
         entry.sourceId = track.sourceId.isEmpty()
-            ? m_activeMusicSourceId
+            ? ((!m_activeFeaturedPlaylistId.isEmpty() && m_currentPage == 4)
+                   ? QStringLiteral("gequbao")
+                   : m_activeMusicSourceId)
             : track.sourceId;
         entry.sourceLabel = m_sourceRegistry.displayName(entry.sourceId);
         entry.detailUrl = track.detailUrl;
@@ -484,17 +832,67 @@ void AppController::applySearchPageResult(const SearchPageResult& result)
     syncSearchLikedStates();
     emit searchPaginationChanged();
     emit searchResultCountChanged();
+    queueSearchStreamPrefetch();
 }
 
 void AppController::onSearchCompleted(const SearchPageResult& result, const QString& keyword)
 {
-    Q_UNUSED(keyword);
+    MusicSourceClient* client = qobject_cast<MusicSourceClient*>(sender());
+    const QString sourceId = client ? client->sourceId() : QString();
 
-    if (MusicSourceClient* client = qobject_cast<MusicSourceClient*>(sender())) {
-        if (client->sourceId() != m_activeMusicSourceId) {
+    if (sourceId == QStringLiteral("gequbao") && m_featuredSearchInFlight) {
+        const FeaturedSearchRequest request = m_inFlightFeaturedSearch;
+        m_featuredSearchInFlight = false;
+
+        storeFeaturedCache(request.playlistId, request.page, result);
+
+        if (request.applyToUi
+            && m_activeFeaturedPlaylistId == request.playlistId
+            && m_currentPage == 4) {
+            applySearchPageResult(result);
+            setSearchBusy(false);
+            if (result.tracks.isEmpty()) {
+                setSearchStatus(QStringLiteral("未找到「%1」的相关歌曲").arg(keyword));
+            } else {
+                setSearchStatus(QStringLiteral("找到 %1 首 · 第 %2 页")
+                                    .arg(result.tracks.size())
+                                    .arg(result.currentPage));
+            }
+        } else if (!request.applyToUi
+                   && m_activeFeaturedPlaylistId == request.playlistId
+                   && m_currentPage == 4) {
+            applyFeaturedCacheToUi(request.playlistId, request.page);
+        }
+
+        if (m_hasPendingFeaturedUiRequest) {
+            const FeaturedSearchRequest pending = m_pendingFeaturedUiRequest;
+            m_hasPendingFeaturedUiRequest = false;
+            m_featuredSearchInFlight = false;
+            if (hasFeaturedCache(pending.playlistId, pending.page)) {
+                if (pending.applyToUi
+                    && m_activeFeaturedPlaylistId == pending.playlistId
+                    && m_currentPage == 4) {
+                    applyFeaturedCacheToUi(pending.playlistId, pending.page);
+                }
+                startNextFeaturedPrefetch();
+            } else {
+                requestFeaturedSearch(pending.playlistId,
+                                      pending.keyword,
+                                      pending.page,
+                                      pending.applyToUi);
+            }
             return;
         }
+
+        startNextFeaturedPrefetch();
+        return;
     }
+
+    if (client && client->sourceId() != m_activeMusicSourceId) {
+        return;
+    }
+
+    Q_UNUSED(keyword);
 
     applySearchPageResult(result);
     setSearchBusy(false);
@@ -510,10 +908,46 @@ void AppController::onSearchCompleted(const SearchPageResult& result, const QStr
 
 void AppController::onSearchFailed(const QString& message)
 {
-    if (MusicSourceClient* client = qobject_cast<MusicSourceClient*>(sender())) {
-        if (client->sourceId() != m_activeMusicSourceId) {
+    MusicSourceClient* client = qobject_cast<MusicSourceClient*>(sender());
+    const QString sourceId = client ? client->sourceId() : QString();
+
+    if (sourceId == QStringLiteral("gequbao") && m_featuredSearchInFlight) {
+        const FeaturedSearchRequest request = m_inFlightFeaturedSearch;
+        m_featuredSearchInFlight = false;
+
+        if (request.applyToUi
+            && m_activeFeaturedPlaylistId == request.playlistId
+            && m_currentPage == 4) {
+            setSearchBusy(false);
+            setSearchStatus(QStringLiteral("加载失败：%1").arg(message));
+        }
+
+        if (m_hasPendingFeaturedUiRequest) {
+            const FeaturedSearchRequest pending = m_pendingFeaturedUiRequest;
+            m_hasPendingFeaturedUiRequest = false;
+            m_featuredSearchInFlight = false;
+            if (hasFeaturedCache(pending.playlistId, pending.page)) {
+                if (pending.applyToUi
+                    && m_activeFeaturedPlaylistId == pending.playlistId
+                    && m_currentPage == 4) {
+                    applyFeaturedCacheToUi(pending.playlistId, pending.page);
+                }
+                startNextFeaturedPrefetch();
+            } else {
+                requestFeaturedSearch(pending.playlistId,
+                                      pending.keyword,
+                                      pending.page,
+                                      pending.applyToUi);
+            }
             return;
         }
+
+        startNextFeaturedPrefetch();
+        return;
+    }
+
+    if (client && client->sourceId() != m_activeMusicSourceId) {
+        return;
     }
 
     setSearchBusy(false);
@@ -552,11 +986,24 @@ void AppController::playSearchRow(int row)
     m_currentSource = registrySourceLabel(m_sourceRegistry, entry.sourceId, entry.songId);
     m_currentSongId = entry.songId;
     m_currentLocalPath.clear();
+    m_currentLyrics = entry.lyrics;
 
     const QString cachedUrl = entry.streamUrl;
     if (!cachedUrl.isEmpty()) {
-        loadOnlineStream(cachedUrl, m_currentTitle, m_currentArtist, entry.metadata.cover, true, entry.lyrics);
+        beginOnlinePlaybackUi(QStringLiteral("缓冲中…"));
+        if (!entry.coverUrl.isEmpty()) {
+            downloadNowPlayingCover(QUrl(entry.coverUrl), entry.songId);
+        }
+        loadOnlineStream(cachedUrl, m_currentTitle, m_currentArtist, {}, true, entry.lyrics);
         return;
+    }
+
+    beginOnlinePlaybackUi(QStringLiteral("正在获取播放地址…"));
+    cancelStreamUrlPrefetch();
+    for (const QString& sourceId : m_sourceRegistry.sourceIds()) {
+        if (MusicSourceClient* client = m_sourceRegistry.source(sourceId)) {
+            client->cancelResolveStreamUrl();
+        }
     }
 
     setSearchBusy(true);
@@ -574,6 +1021,27 @@ void AppController::playSearchRow(int row)
 
 void AppController::onStreamUrlResolved(const OnlineTrack& track)
 {
+    if (m_activeStreamPrefetchRow >= 0) {
+        const int row = m_activeStreamPrefetchRow;
+        m_streamPrefetchInFlight = false;
+        m_activeStreamPrefetchRow = -1;
+
+        if (row >= 0 && row < m_searchResultModel.rowCount()) {
+            const SearchResultEntry& entry = m_searchResultModel.entries().at(row);
+            if (songIdsMatch(entry.songId, track.songId)
+                && sourcesMatch(effectiveSourceId(entry.sourceId, entry.songId),
+                                 effectiveSourceId(track.sourceId, track.songId))) {
+                m_searchResultModel.updateStreamUrl(row, track.streamUrl, track.coverUrl, track.lyrics);
+                m_playlistStore.updateTrackStreamUrl(entry.songId, track.streamUrl, track.coverUrl);
+            }
+        }
+
+        startNextStreamPrefetch();
+        if (m_pendingSearchRow < 0 && m_pendingPlaylistRow < 0) {
+            return;
+        }
+    }
+
     setSearchBusy(false);
 
     if (m_pendingSearchRow >= 0) {
@@ -593,19 +1061,17 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
         m_searchResultModel.updateStreamUrl(m_pendingSearchRow, track.streamUrl, track.coverUrl, track.lyrics);
         const QString songId = m_searchResultModel.songIdAt(m_pendingSearchRow);
         m_playlistStore.updateTrackStreamUrl(songId, track.streamUrl, track.coverUrl);
-        if (!track.coverUrl.isEmpty()) {
-            downloadSearchCover(m_pendingSearchRow, QUrl(track.coverUrl));
-        }
-
-        QImage cover;
-        if (m_pendingSearchRow < m_searchResultModel.entries().size()) {
-            cover = m_searchResultModel.entries().at(m_pendingSearchRow).metadata.cover;
-        }
 
         const QString title = track.title.isEmpty() ? track.displayTitle : track.title;
         const QString artist = track.artist.isEmpty() ? QStringLiteral("在线音乐") : track.artist;
+        m_currentTitle = title;
+        m_currentArtist = artist;
+        m_currentLyrics = track.lyrics;
         setSearchStatus(QStringLiteral("正在播放…"));
-        loadOnlineStream(track.streamUrl, title, artist, cover, true, track.lyrics);
+        if (!track.coverUrl.isEmpty()) {
+            downloadNowPlayingCover(QUrl(track.coverUrl), track.songId);
+        }
+        loadOnlineStream(track.streamUrl, title, artist, {}, true, track.lyrics);
         return;
     }
 
@@ -625,13 +1091,125 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
 
         const QString title = track.title.isEmpty() ? track.displayTitle : track.title;
         const QString artist = track.artist.isEmpty() ? QStringLiteral("在线音乐") : track.artist;
+        m_currentTitle = title;
+        m_currentArtist = artist;
+        m_currentLyrics = track.lyrics;
         setSearchStatus(QStringLiteral("正在播放…"));
+        if (!track.coverUrl.isEmpty()) {
+            downloadNowPlayingCover(QUrl(track.coverUrl), track.songId);
+        }
         loadOnlineStream(track.streamUrl, title, artist, {}, true, track.lyrics);
     }
 }
 
+void AppController::beginOnlinePlaybackUi(const QString& subtitle)
+{
+    m_currentSubtitle = subtitle;
+    m_currentCover = {};
+    m_hasCover = false;
+    emit nowPlayingChanged();
+}
+
+void AppController::downloadNowPlayingCover(const QUrl& coverUrl, const QString& songId)
+{
+    if (!coverUrl.isValid()) {
+        return;
+    }
+
+    const QString expectedSongId = songId.isEmpty() ? m_currentSongId : songId;
+
+    QNetworkRequest request(coverUrl);
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+                      QStringLiteral("Mozilla/5.0 MusicQuick/1.0"));
+    request.setTransferTimeout(10000);
+
+    QNetworkReply* reply = m_coverNetwork.get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, expectedSongId]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            return;
+        }
+        if (m_currentSongId != expectedSongId) {
+            return;
+        }
+        QImage image;
+        if (!image.loadFromData(reply->readAll())) {
+            return;
+        }
+        m_currentCover = image;
+        m_hasCover = true;
+        emit nowPlayingChanged();
+    });
+}
+
+void AppController::queueSearchStreamPrefetch()
+{
+    cancelStreamUrlPrefetch();
+
+    const QVector<SearchResultEntry>& entries = m_searchResultModel.entries();
+    const int limit = qMin(entries.size(), kStreamPrefetchCount);
+    for (int row = 0; row < limit; ++row) {
+        if (entries.at(row).streamUrl.isEmpty()) {
+            m_streamPrefetchQueue.append(row);
+        }
+    }
+
+    if (!m_streamPrefetchQueue.isEmpty()) {
+        QTimer::singleShot(400, this, &AppController::startNextStreamPrefetch);
+    }
+}
+
+void AppController::startNextStreamPrefetch()
+{
+    if (m_streamPrefetchInFlight || m_pendingSearchRow >= 0 || m_pendingPlaylistRow >= 0) {
+        return;
+    }
+
+    while (!m_streamPrefetchQueue.isEmpty()) {
+        const int row = m_streamPrefetchQueue.takeFirst();
+        if (row < 0 || row >= m_searchResultModel.rowCount()) {
+            continue;
+        }
+
+        const SearchResultEntry& entry = m_searchResultModel.entries().at(row);
+        if (!entry.streamUrl.isEmpty()) {
+            continue;
+        }
+
+        const QString src = effectiveSourceId(entry.sourceId, entry.songId);
+        MusicSourceClient* client = m_sourceRegistry.source(src);
+        if (!client) {
+            continue;
+        }
+
+        m_streamPrefetchInFlight = true;
+        m_activeStreamPrefetchRow = row;
+        client->resolveStreamUrl(entry.songId,
+                                 QUrl(entry.detailUrl),
+                                 entry.metadata.title,
+                                 entry.metadata.artist);
+        return;
+    }
+}
+
+void AppController::cancelStreamUrlPrefetch()
+{
+    m_streamPrefetchQueue.clear();
+    m_streamPrefetchInFlight = false;
+    m_activeStreamPrefetchRow = -1;
+}
+
 void AppController::onStreamUrlFailed(const QString& songId, const QString& message)
 {
+    if (m_activeStreamPrefetchRow >= 0) {
+        m_streamPrefetchInFlight = false;
+        m_activeStreamPrefetchRow = -1;
+        startNextStreamPrefetch();
+        if (m_pendingSearchRow < 0 && m_pendingPlaylistRow < 0) {
+            return;
+        }
+    }
+
     if (m_pendingSearchRow >= 0) {
         if (!isPendingOnlineSearchRow(m_pendingSearchRow)) {
             return;
@@ -661,35 +1239,6 @@ void AppController::onStreamUrlFailed(const QString& songId, const QString& mess
     }
 
     handleOnlinePlaybackFailure(QStringLiteral("解析失败：%1").arg(message));
-}
-
-void AppController::downloadSearchCover(int row, const QUrl& coverUrl)
-{
-    if (!coverUrl.isValid()) {
-        return;
-    }
-
-    QNetworkRequest request(coverUrl);
-    request.setHeader(QNetworkRequest::UserAgentHeader,
-                      QStringLiteral("Mozilla/5.0 MusicQuick/1.0"));
-    request.setTransferTimeout(10000);
-
-    QNetworkReply* reply = m_coverNetwork.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, row]() {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            return;
-        }
-        QImage image;
-        if (image.loadFromData(reply->readAll())) {
-            m_searchResultModel.updateCover(row, image);
-            if (m_isOnlinePlayback && m_pendingSearchRow == row) {
-                m_currentCover = image;
-                m_hasCover = true;
-                emit nowPlayingChanged();
-            }
-        }
-    });
 }
 
 void AppController::loadOnlineStream(const QString& streamUrl,
@@ -788,6 +1337,7 @@ void AppController::handleOnlinePlaybackFailure(const QString& message)
 
 void AppController::cancelPendingOnlineRequests()
 {
+    cancelStreamUrlPrefetch();
     m_pendingStreamUrl.clear();
     if (m_streamLoader) {
         m_streamLoader->cancelActivePrefetch();
@@ -1270,8 +1820,20 @@ void AppController::playOnlineTrackRef(const PlaylistTrackRef& track, bool autoP
     m_currentSource = registrySourceLabel(m_sourceRegistry, track.sourceId, track.songId);
 
     if (!track.streamUrl.isEmpty()) {
+        beginOnlinePlaybackUi(QStringLiteral("缓冲中…"));
+        if (!track.coverUrl.isEmpty()) {
+            downloadNowPlayingCover(QUrl(track.coverUrl), track.songId);
+        }
         loadOnlineStream(track.streamUrl, m_currentTitle, m_currentArtist, {}, autoPlay);
         return;
+    }
+
+    beginOnlinePlaybackUi(QStringLiteral("正在获取播放地址…"));
+    cancelStreamUrlPrefetch();
+    for (const QString& sourceId : m_sourceRegistry.sourceIds()) {
+        if (MusicSourceClient* client = m_sourceRegistry.source(sourceId)) {
+            client->cancelResolveStreamUrl();
+        }
     }
 
     setSearchBusy(true);
@@ -1396,8 +1958,66 @@ void AppController::openPlaylist(const QString& id)
     if (!m_playlistStore.playlistById(id)) {
         return;
     }
+
+    pushNavState();
+
+    if (!m_activeFeaturedPlaylistId.isEmpty()) {
+        m_activeFeaturedPlaylistId.clear();
+        emit activeFeaturedPlaylistChanged();
+    }
     setActivePlaylistId(id);
     setCurrentPage(3);
+}
+
+void AppController::openFeaturedPlaylist(const QString& id)
+{
+    const FeaturedPlaylist* playlist = FeaturedPlaylistCatalog::find(id);
+    if (!playlist) {
+        return;
+    }
+
+    if (m_activeFeaturedPlaylistId == id && m_currentPage == 4) {
+        if (hasFeaturedCache(id, 1)) {
+            applyFeaturedCacheToUi(id, 1);
+        }
+        return;
+    }
+
+    pushNavState();
+
+    if (!m_activePlaylistId.isEmpty()) {
+        setActivePlaylistId(QString());
+    }
+
+    m_activeFeaturedPlaylistId = id;
+    emit activeFeaturedPlaylistChanged();
+
+    setCurrentPage(4);
+
+    if (hasFeaturedCache(id, 1)) {
+        applyFeaturedCacheToUi(id, 1);
+    } else {
+        searchFeaturedPlaylist(playlist->keyword, 1);
+    }
+}
+
+void AppController::toggleFavoriteFeaturedPlaylist()
+{
+    if (m_activeFeaturedPlaylistId.isEmpty()) {
+        return;
+    }
+
+    if (m_favoriteFeaturedPlaylistIds.contains(m_activeFeaturedPlaylistId)) {
+        m_favoriteFeaturedPlaylistIds.removeAll(m_activeFeaturedPlaylistId);
+        setStatus(QStringLiteral("已取消收藏「%1」").arg(activeFeaturedPlaylistTitle()));
+    } else {
+        m_favoriteFeaturedPlaylistIds.append(m_activeFeaturedPlaylistId);
+        setStatus(QStringLiteral("已收藏「%1」").arg(activeFeaturedPlaylistTitle()));
+    }
+
+    saveFavoriteFeaturedPlaylists();
+    emit favoriteFeaturedPlaylistsChanged();
+    emit activeFeaturedPlaylistChanged();
 }
 
 void AppController::playPlaylistRow(int row)
