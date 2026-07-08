@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 QuickEffects Multimedia Network Concurrent)
+find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 QuickEffects Multimedia Network Concurrent Svg)
 if(NOT ANDROID)
     find_package(Qt6 REQUIRED COMPONENTS Test)
 endif()
@@ -88,7 +88,7 @@ foreach(_icon IN LISTS MUSICQUICK_ICON_NAMES)
     set_source_files_properties("${_icon_path}" PROPERTIES QT_RESOURCE_ALIAS "${_icon}")
     list(APPEND MUSICQUICK_ICON_FILES "${_icon_path}")
 endforeach()
-set(MUSICQUICK_LOGO_FILE "${MUSICQUICK_ICON_DIR}/GankDream-03-origami-dove.svg")
+set(MUSICQUICK_LOGO_FILE "${MUSICQUICK_ICON_DIR}/Logo.svg")
 set_source_files_properties("${MUSICQUICK_LOGO_FILE}" PROPERTIES QT_RESOURCE_ALIAS "logo.svg")
 list(APPEND MUSICQUICK_ICON_FILES "${MUSICQUICK_LOGO_FILE}")
 qt_add_resources(MusicQuick "app_icons"
@@ -139,6 +139,8 @@ qt_add_qml_module(MusicQuick
         qml/Theme.qml
         qml/Icons.qml
         qml/components/AppIcon.qml
+        qml/components/AppSidebar.qml
+        qml/components/IconTransportButton.qml
         qml/components/TopBar.qml
         qml/components/WindowControls.qml
         qml/components/SideNav.qml
@@ -152,6 +154,9 @@ qt_add_qml_module(MusicQuick
         qml/components/VinylDisc.qml
         qml/components/LyricsPanel.qml
         qml/components/FeaturedPlaylistCard.qml
+        qml/components/ClickSpark.qml
+        qml/components/InfiniteMenu.qml
+        qml/pages/DiscoverPage.qml
         qml/pages/HomePage.qml
         qml/pages/LocalMusicPage.qml
         qml/pages/SearchPage.qml
@@ -169,10 +174,12 @@ target_link_libraries(MusicQuick PRIVATE
     Qt6::Multimedia
     Qt6::Network
     Qt6::Concurrent
+    Qt6::Svg
 )
 
 if(WIN32 AND NOT ANDROID)
     set_target_properties(MusicQuick PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_sources(MusicQuick PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.rc")
 endif()
 
 if(NOT ANDROID)

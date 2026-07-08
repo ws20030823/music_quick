@@ -1,4 +1,4 @@
-// Main.qml — 无边框窗口 + 侧栏 + 顶栏 + 全宽底栏
+// Main.qml — 网易云布局：左侧栏 | 右侧内容区 | 全宽底栏
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -13,7 +13,7 @@ ApplicationWindow {
     minimumWidth: 900
     minimumHeight: 620
     visible: true
-    title: qsTr("Music Quick")
+    title: qsTr("WingSound")
     color: Theme.bgBase
     flags: Qt.Window | Qt.FramelessWindowHint
 
@@ -33,53 +33,61 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
-        TopBar {
-            id: topBar
-            Layout.fillWidth: true
-            Layout.preferredHeight: Theme.topBarHeight
-            window: root
-            onSearchSubmitted: function(keyword) {
-                app.searchOnline(keyword, 1)
-                root.navigateTo(2)
-            }
-        }
-
-        Connections {
-            target: app
-            function onSearchKeywordChanged() {
-                if (topBar.searchField.text !== app.searchKeyword) {
-                    topBar.searchField.text = app.searchKeyword
-                }
-            }
-        }
-
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
 
-            SideNav {
+            AppSidebar {
                 Layout.preferredWidth: Theme.sidebarWidth
                 Layout.minimumWidth: Theme.sidebarWidth
                 Layout.fillHeight: true
+                window: root
                 currentPage: app.currentPage
                 onNavigate: function(page) { root.navigateTo(page) }
             }
 
-            StackLayout {
+            ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: app.currentPage
+                spacing: 0
 
-                HomePage { }
-                LocalMusicPage {
-                    trackModel: app.trackModel
-                    onImportClicked: importDialog.open()
+                TopBar {
+                    id: topBar
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Theme.topBarHeight
+                    window: root
+                    onSearchSubmitted: function(keyword) {
+                        app.searchOnline(keyword, 1)
+                        root.navigateTo(3)
+                    }
                 }
-                SearchPage { }
-                PlaylistPage { }
-                FeaturedPlaylistPage { }
-                SettingsPage { }
+
+                Connections {
+                    target: app
+                    function onSearchKeywordChanged() {
+                        if (topBar.searchField.text !== app.searchKeyword) {
+                            topBar.searchField.text = app.searchKeyword
+                        }
+                    }
+                }
+
+                StackLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    currentIndex: app.currentPage
+
+                    DiscoverPage { }
+                    HomePage { }
+                    LocalMusicPage {
+                        trackModel: app.trackModel
+                        onImportClicked: importDialog.open()
+                    }
+                    SearchPage { }
+                    PlaylistPage { }
+                    FeaturedPlaylistPage { }
+                    SettingsPage { }
+                }
             }
         }
 
@@ -110,5 +118,15 @@ ApplicationWindow {
         anchors.fill: parent
         z: 200
         window: root
+    }
+
+    ClickSpark {
+        anchors.fill: parent
+        z: 300
+        sparkColor: Theme.accent
+        sparkSize: 10
+        sparkRadius: 15
+        sparkCount: 8
+        duration: 400
     }
 }

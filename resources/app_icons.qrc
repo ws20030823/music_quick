@@ -1,7 +1,7 @@
 <RCC>
     <!-- 仅供参考；实际资源由 CMakeLists.txt 中 qt_add_resources(BASE/FILES) 注册 -->
     <qresource prefix="/icons">
-        <file alias="logo.svg">icons/GankDream-03-origami-dove.svg</file>
+        <file alias="logo.svg">icons/Logo.svg</file>
         <file alias="play.svg">icons/play.svg</file>
         <file alias="pause.svg">icons/pause.svg</file>
         <file alias="prev.svg">icons/prev.svg</file>

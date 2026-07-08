@@ -324,8 +324,8 @@ Rectangle {
                             anchors.centerIn: parent
                             visible: !app.hasCover
                             name: Icons.play
-                            size: 20
-                            color: Theme.npTextDim
+                            size: 22
+                            color: Theme.iconMuted
                         }
                     }
 
@@ -365,40 +365,37 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 12
 
-                        NpIconButton {
+                        IconTransportButton {
                             iconName: Icons.modeIconName(app.playbackMode)
-                            enabled: app.canControl
+                            iconColor: !app.canControl ? Theme.iconMuted
+                                : (app.playbackMode === 0 ? Theme.textPrimary : Theme.accent)
+                            interactive: app.canControl
                             onClicked: { if (app.canControl) app.cyclePlaybackMode() }
-                            contentItem: AppIcon {
-                                name: Icons.modeIconName(app.playbackMode)
-                                size: 18
-                                color: app.playbackMode === 0 ? Theme.npTextMuted : Theme.accent
-                                anchors.centerIn: parent
-                            }
                         }
-                        NpIconButton {
+                        IconTransportButton {
                             iconName: Icons.prev
-                            enabled: app.canControl
+                            interactive: app.canControl
                             onClicked: { if (app.canControl) app.playPrevious() }
                         }
-                        NpIconButton {
+                        IconTransportButton {
                             iconName: app.isPlaying ? Icons.pause : Icons.play
                             iconSize: 22
                             implicitWidth: 44
                             implicitHeight: 44
-                            enabled: app.canControl
+                            interactive: app.canControl
+                            iconColor: app.canControl ? Theme.textPrimary : Theme.iconMuted
                             background: Rectangle {
                                 radius: 22
                                 color: parent.down ? Theme.accentSoft
-                                     : (parent.hovered ? Theme.bgHover : Theme.bgBase)
-                                border.color: Theme.npBorder
+                                     : (parent.hovered && app.canControl ? Theme.bgHover : Theme.bgCard)
+                                border.color: Theme.borderStrong
                                 border.width: 1
                             }
                             onClicked: { if (app.canControl) app.togglePlayback() }
                         }
-                        NpIconButton {
+                        IconTransportButton {
                             iconName: Icons.next
-                            enabled: app.canControl
+                            interactive: app.canControl
                             onClicked: { if (app.canControl) app.playNext() }
                         }
                     }
@@ -467,9 +464,12 @@ Rectangle {
                             }
                         }
 
-                        NpIconButton {
+                        IconTransportButton {
                             anchors.fill: parent
                             iconName: Icons.volume
+                            iconSize: 18
+                            interactive: true
+                            ToolTip.text: qsTr("音量")
                             onClicked: npVolumePopup.open()
                         }
 
@@ -519,9 +519,10 @@ Rectangle {
                         }
                     }
 
-                    NpIconButton {
+                    IconTransportButton {
                         iconName: Icons.playlist
-                        enabled: app.trackCount > 0
+                        interactive: app.trackCount > 0
+                        ToolTip.text: qsTr("播放队列")
                         onClicked: { if (app.trackCount > 0) app.queueVisible = true }
                     }
                 }

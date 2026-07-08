@@ -6,19 +6,11 @@ import MusicQuick
 
 Rectangle {
     id: root
-    color: Theme.bgSidebar
+    color: "transparent"
     implicitWidth: Theme.sidebarWidth
 
     property int currentPage: 0
     signal navigate(int page)
-
-    Rectangle {
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: 1
-        color: Theme.border
-    }
 
     CreatePlaylistDialog {
         id: createPlaylistDialog
@@ -37,10 +29,11 @@ Rectangle {
             spacing: 4
 
             SectionLabel { title: qsTr("发现") }
-            NavButton { label: qsTr("推荐"); page: 0; playlistId: ""; featuredPlaylistId: "" }
+            NavButton { label: qsTr("首页"); page: 0; playlistId: ""; featuredPlaylistId: "" }
+            NavButton { label: qsTr("推荐"); page: 1; playlistId: ""; featuredPlaylistId: "" }
 
             SectionLabel { title: qsTr("我的音乐") }
-            NavButton { label: qsTr("本地音乐"); page: 1; playlistId: ""; featuredPlaylistId: "" }
+            NavButton { label: qsTr("本地音乐"); page: 2; playlistId: ""; featuredPlaylistId: "" }
             NavButton {
                 label: qsTr("最近播放")
                 page: -1
@@ -57,7 +50,7 @@ Rectangle {
                 delegate: NavButton {
                     required property var modelData
                     label: modelData.title
-                    page: 4
+                    page: 5
                     playlistId: ""
                     featuredPlaylistId: modelData.id
                     subtitle: modelData.subtitle
@@ -105,7 +98,7 @@ Rectangle {
                 delegate: NavButton {
                     required property var modelData
                     label: modelData.name
-                    page: 3
+                    page: 4
                     playlistId: modelData.id
                     subtitle: modelData.trackCount > 0
                              ? qsTr("%1 首").arg(modelData.trackCount) : ""

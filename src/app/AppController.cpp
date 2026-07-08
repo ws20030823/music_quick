@@ -186,17 +186,17 @@ int AppController::currentPage() const { return m_currentPage; }
 void AppController::setCurrentPage(int page)
 {
     if (m_currentPage == page) {
-        if (page == 3 && !m_activePlaylistId.isEmpty()) {
+        if (page == 4 && !m_activePlaylistId.isEmpty()) {
             reloadActivePlaylistModel();
         }
         return;
     }
     m_currentPage = page;
     emit currentPageChanged();
-    if (page == 3 && !m_activePlaylistId.isEmpty()) {
+    if (page == 4 && !m_activePlaylistId.isEmpty()) {
         reloadActivePlaylistModel();
     }
-    if (page != 4 && !m_activeFeaturedPlaylistId.isEmpty() && !m_navigatingBack) {
+    if (page != 5 && !m_activeFeaturedPlaylistId.isEmpty() && !m_navigatingBack) {
         m_activeFeaturedPlaylistId.clear();
         emit activeFeaturedPlaylistChanged();
     }
@@ -621,7 +621,7 @@ void AppController::navigateToPage(int page)
 
     pushNavState();
 
-    if (page != 3) {
+    if (page != 4) {
         setActivePlaylistId(QString());
     }
 
@@ -648,7 +648,7 @@ void AppController::navigateBack()
 
     setCurrentPage(previous.page);
 
-    if (previous.page == 4 && !previous.featuredPlaylistId.isEmpty()) {
+    if (previous.page == 5 && !previous.featuredPlaylistId.isEmpty()) {
         if (hasFeaturedCache(previous.featuredPlaylistId, 1)) {
             applyFeaturedCacheToUi(previous.featuredPlaylistId, 1);
         } else {
@@ -810,7 +810,7 @@ void AppController::applySearchPageResult(const SearchPageResult& result)
         SearchResultEntry entry;
         entry.songId = track.songId;
         entry.sourceId = track.sourceId.isEmpty()
-            ? ((!m_activeFeaturedPlaylistId.isEmpty() && m_currentPage == 4)
+            ? ((!m_activeFeaturedPlaylistId.isEmpty() && m_currentPage == 5)
                    ? QStringLiteral("gequbao")
                    : m_activeMusicSourceId)
             : track.sourceId;
@@ -848,7 +848,7 @@ void AppController::onSearchCompleted(const SearchPageResult& result, const QStr
 
         if (request.applyToUi
             && m_activeFeaturedPlaylistId == request.playlistId
-            && m_currentPage == 4) {
+            && m_currentPage == 5) {
             applySearchPageResult(result);
             setSearchBusy(false);
             if (result.tracks.isEmpty()) {
@@ -860,7 +860,7 @@ void AppController::onSearchCompleted(const SearchPageResult& result, const QStr
             }
         } else if (!request.applyToUi
                    && m_activeFeaturedPlaylistId == request.playlistId
-                   && m_currentPage == 4) {
+                   && m_currentPage == 5) {
             applyFeaturedCacheToUi(request.playlistId, request.page);
         }
 
@@ -871,7 +871,7 @@ void AppController::onSearchCompleted(const SearchPageResult& result, const QStr
             if (hasFeaturedCache(pending.playlistId, pending.page)) {
                 if (pending.applyToUi
                     && m_activeFeaturedPlaylistId == pending.playlistId
-                    && m_currentPage == 4) {
+                    && m_currentPage == 5) {
                     applyFeaturedCacheToUi(pending.playlistId, pending.page);
                 }
                 startNextFeaturedPrefetch();
@@ -917,7 +917,7 @@ void AppController::onSearchFailed(const QString& message)
 
         if (request.applyToUi
             && m_activeFeaturedPlaylistId == request.playlistId
-            && m_currentPage == 4) {
+            && m_currentPage == 5) {
             setSearchBusy(false);
             setSearchStatus(QStringLiteral("加载失败：%1").arg(message));
         }
@@ -929,7 +929,7 @@ void AppController::onSearchFailed(const QString& message)
             if (hasFeaturedCache(pending.playlistId, pending.page)) {
                 if (pending.applyToUi
                     && m_activeFeaturedPlaylistId == pending.playlistId
-                    && m_currentPage == 4) {
+                    && m_currentPage == 5) {
                     applyFeaturedCacheToUi(pending.playlistId, pending.page);
                 }
                 startNextFeaturedPrefetch();
@@ -1947,7 +1947,7 @@ bool AppController::deletePlaylist(const QString& id)
     }
     if (m_activePlaylistId == id) {
         setActivePlaylistId(QStringLiteral("liked"));
-        setCurrentPage(3);
+        setCurrentPage(4);
     }
     setStatus(QStringLiteral("已删除歌单「%1」").arg(name));
     return true;
@@ -1966,7 +1966,7 @@ void AppController::openPlaylist(const QString& id)
         emit activeFeaturedPlaylistChanged();
     }
     setActivePlaylistId(id);
-    setCurrentPage(3);
+    setCurrentPage(4);
 }
 
 void AppController::openFeaturedPlaylist(const QString& id)
@@ -1976,7 +1976,7 @@ void AppController::openFeaturedPlaylist(const QString& id)
         return;
     }
 
-    if (m_activeFeaturedPlaylistId == id && m_currentPage == 4) {
+    if (m_activeFeaturedPlaylistId == id && m_currentPage == 5) {
         if (hasFeaturedCache(id, 1)) {
             applyFeaturedCacheToUi(id, 1);
         }
@@ -1992,7 +1992,7 @@ void AppController::openFeaturedPlaylist(const QString& id)
     m_activeFeaturedPlaylistId = id;
     emit activeFeaturedPlaylistChanged();
 
-    setCurrentPage(4);
+    setCurrentPage(5);
 
     if (hasFeaturedCache(id, 1)) {
         applyFeaturedCacheToUi(id, 1);

@@ -12,12 +12,12 @@ Item {
     Connections {
         target: app
         function onCurrentPageChanged() {
-            if (app.currentPage === 3) {
+            if (app.currentPage === 4) {
                 app.refreshActivePlaylist()
             }
         }
         function onActivePlaylistIdChanged() {
-            if (app.currentPage === 3) {
+            if (app.currentPage === 4) {
                 app.refreshActivePlaylist()
             }
         }

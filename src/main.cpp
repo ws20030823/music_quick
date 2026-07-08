@@ -1,5 +1,5 @@
 // =============================================================================
-// main.cpp — Music Quick 程序入口
+// main.cpp — WingSound 程序入口
 // =============================================================================
 // 创建 QGuiApplication + QQmlApplicationEngine，将 AppController 注册为全局 "app"，
 // 加载 QML 模块 MusicQuick 中的 Main.qml。
@@ -12,6 +12,7 @@
 #include <QFile>
 #include <QStandardPaths>
 #include <QTextStream>
+#include <QIcon>
 
 #include "app/AppController.h"
 #include "app/CoverImageProvider.h"
@@ -36,8 +37,9 @@ int main(int argc, char* argv[])
     startupLog(QStringLiteral("main: enter"));
     QGuiApplication app(argc, argv);
     startupLog(QStringLiteral("main: QGuiApplication created"));
-    QGuiApplication::setOrganizationName(QStringLiteral("MusicQuick"));
-    QGuiApplication::setApplicationName(QStringLiteral("MusicQuick"));
+    QGuiApplication::setOrganizationName(QStringLiteral("WingSound"));
+    QGuiApplication::setApplicationName(QStringLiteral("WingSound"));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/logo.svg")));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     QQmlApplicationEngine engine;

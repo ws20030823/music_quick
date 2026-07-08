@@ -78,7 +78,7 @@ QtObject {
     readonly property int radiusLg: 12
     readonly property int coverSize: 48
     readonly property int listCoverSize: 40
-    readonly property int logoSize: 24
+    readonly property int logoSize: 28
 
     // ── 搜索页（ui-ux-pro-max：搜索 CTA + 卡片层次）──
     readonly property color searchHeroStart: "#E8F4FD"
