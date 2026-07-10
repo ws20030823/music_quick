@@ -1,10 +1,10 @@
 #include "network/CurlHttpClient.h"
 
+#include <QFile>
 #include <QProcess>
+#include <QTemporaryFile>
 
 namespace {
-
-constexpr auto kStatusMarker = "__HTTP_CODE__:";
 
 QString curlExecutable()
 {
@@ -13,6 +13,30 @@ QString curlExecutable()
 #else
     return QStringLiteral("curl");
 #endif
+}
+
+QStringList baseArgs(const QString& bodyFilePath)
+{
+    return {
+        QStringLiteral("-s"),
+        QStringLiteral("-L"),
+        QStringLiteral("--max-time"),
+        QStringLiteral("20"),
+        QStringLiteral("-o"),
+        bodyFilePath,
+        QStringLiteral("-w"),
+        QStringLiteral("%{http_code}"),
+    };
+}
+
+QStringList headerArgs(const CurlHttpClient::HeaderList& headers)
+{
+    QStringList args;
+    for (const auto& header : headers) {
+        args << QStringLiteral("-H")
+             << QString::fromUtf8(header.first + ": " + header.second);
+    }
+    return args;
 }
 
 HttpResponse runCurl(const QStringList& args)
@@ -40,44 +64,41 @@ HttpResponse runCurl(const QStringList& args)
         return result;
     }
 
-    QByteArray output = process.readAllStandardOutput();
-    const int markerIndex = output.lastIndexOf(kStatusMarker);
-    if (markerIndex >= 0) {
-        const QByteArray statusBytes = output.mid(markerIndex + int(sizeof(kStatusMarker) - 1)).trimmed();
-        result.statusCode = QString::fromUtf8(statusBytes).toInt();
-        output.truncate(markerIndex);
-    } else {
+    const QByteArray statusBytes = process.readAllStandardOutput().trimmed();
+    result.statusCode = QString::fromUtf8(statusBytes).toInt();
+    if (result.statusCode <= 0) {
         result.error = QStringLiteral("curl 响应缺少 HTTP 状态码");
         return result;
     }
 
-    result.body = output;
-    if (result.statusCode >= 400) {
+    const QString bodyPath = args.at(args.indexOf(QStringLiteral("-o")) + 1);
+    QFile bodyFile(bodyPath);
+    if (!bodyFile.open(QIODevice::ReadOnly)) {
+        result.error = QStringLiteral("无法读取 curl 响应正文");
+        return result;
+    }
+    result.body = bodyFile.readAll();
+
+    if (!result.ok() && result.error.isEmpty()) {
         result.error = QStringLiteral("HTTP %1").arg(result.statusCode);
     }
     return result;
 }
 
-QStringList baseArgs()
+HttpResponse runRequest(const QStringList& requestArgs)
 {
-    return {
-        QStringLiteral("-s"),
-        QStringLiteral("-L"),
-        QStringLiteral("--max-time"),
-        QStringLiteral("20"),
-        QStringLiteral("-w"),
-        QStringLiteral("\n%1%{http_code}").arg(QString::fromLatin1(kStatusMarker)),
-    };
-}
-
-QStringList headerArgs(const CurlHttpClient::HeaderList& headers)
-{
-    QStringList args;
-    for (const auto& header : headers) {
-        args << QStringLiteral("-H")
-             << QString::fromUtf8(header.first + ": " + header.second);
+    QTemporaryFile bodyFile;
+    bodyFile.setAutoRemove(true);
+    if (!bodyFile.open()) {
+        HttpResponse result;
+        result.error = QStringLiteral("无法创建临时文件");
+        return result;
     }
-    return args;
+    bodyFile.close();
+
+    QStringList args = baseArgs(bodyFile.fileName());
+    args << requestArgs;
+    return runCurl(args);
 }
 
 } // namespace
@@ -97,20 +118,19 @@ bool CurlHttpClient::isAvailable()
 
 HttpResponse CurlHttpClient::get(const QUrl& url, const HeaderList& headers)
 {
-    QStringList args = baseArgs();
-    args << headerArgs(headers);
-    args << QString::fromUtf8(url.toEncoded(QUrl::FullyEncoded));
-    return runCurl(args);
+    QStringList requestArgs = headerArgs(headers);
+    requestArgs << QString::fromUtf8(url.toEncoded(QUrl::FullyEncoded));
+    return runRequest(requestArgs);
 }
 
 HttpResponse CurlHttpClient::post(const QUrl& url,
                                   const QByteArray& body,
                                   const HeaderList& headers)
 {
-    QStringList args = baseArgs();
-    args << QStringLiteral("-X") << QStringLiteral("POST");
-    args << headerArgs(headers);
-    args << QStringLiteral("--data-binary") << QString::fromUtf8(body);
-    args << QString::fromUtf8(url.toEncoded(QUrl::FullyEncoded));
-    return runCurl(args);
+    QStringList requestArgs;
+    requestArgs << QStringLiteral("-X") << QStringLiteral("POST");
+    requestArgs << headerArgs(headers);
+    requestArgs << QStringLiteral("--data-binary") << QString::fromUtf8(body);
+    requestArgs << QString::fromUtf8(url.toEncoded(QUrl::FullyEncoded));
+    return runRequest(requestArgs);
 }

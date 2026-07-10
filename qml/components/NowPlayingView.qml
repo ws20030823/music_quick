@@ -29,7 +29,7 @@ Rectangle {
     Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
     Shortcut {
-        sequence: StandardKey.Cancel
+        sequences: [StandardKey.Cancel]
         enabled: app.nowPlayingVisible
         onActivated: app.nowPlayingVisible = false
     }
@@ -482,7 +482,6 @@ Rectangle {
                             height: 132
                             padding: 10
                             modal: false
-                            focus: true
                             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                             background: Rectangle {
                                 radius: Theme.radiusMd

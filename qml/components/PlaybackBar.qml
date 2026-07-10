@@ -544,8 +544,6 @@ Rectangle {
 
                     modal: false
 
-                    focus: true
-
                     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
 

@@ -12,7 +12,7 @@ Item {
     property int duration: 400
     property string easing: "ease-out"
     property real extraScale: 1.0
-    property bool enabled: !Theme.reduceMotion
+    property bool sparksEnabled: !Theme.reduceMotion
 
     default property alias content: contentLayer.data
 
@@ -75,7 +75,7 @@ Item {
         z: 1
         propagateComposedEvents: true
         acceptedButtons: Qt.AllButtons
-        enabled: root.enabled
+        enabled: root.sparksEnabled
 
         onPressed: function(mouse) {
             root.spawnSparks(mouse.x, mouse.y)
@@ -109,7 +109,7 @@ Item {
     }
 
     function spawnSparks(x, y) {
-        if (!enabled)
+        if (!sparksEnabled)
             return
 
         var now = Date.now()

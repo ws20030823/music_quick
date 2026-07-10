@@ -140,6 +140,8 @@ qt_add_qml_module(MusicQuick
         qml/Icons.qml
         qml/components/AppIcon.qml
         qml/components/AppSidebar.qml
+        qml/components/SurfaceCard.qml
+        qml/components/WallpaperBackground.qml
         qml/components/IconTransportButton.qml
         qml/components/TopBar.qml
         qml/components/WindowControls.qml
@@ -149,6 +151,9 @@ qt_add_qml_module(MusicQuick
         qml/components/SearchResultList.qml
         qml/components/LocalMusicList.qml
         qml/components/CreatePlaylistDialog.qml
+        qml/components/CardDialog.qml
+        qml/components/CardDialogSurface.qml
+        qml/components/CardDialogButton.qml
         qml/components/QueueDialog.qml
         qml/components/NowPlayingView.qml
         qml/components/VinylDisc.qml
@@ -156,13 +161,21 @@ qt_add_qml_module(MusicQuick
         qml/components/FeaturedPlaylistCard.qml
         qml/components/ClickSpark.qml
         qml/components/InfiniteMenu.qml
+        qml/components/StaggeredMenu.qml
+        qml/components/settings/SettingsCard.qml
+        qml/components/settings/SettingsPanelLayout.qml
+        qml/components/settings/SettingsRow.qml
+        qml/components/settings/SettingsPersonalPanel.qml
+        qml/components/settings/SettingsGeneralPanel.qml
+        qml/components/settings/SettingsSystemPanel.qml
+        qml/components/settings/SettingsThemePanel.qml
+        qml/components/settings/SettingsContentView.qml
         qml/pages/DiscoverPage.qml
         qml/pages/HomePage.qml
         qml/pages/LocalMusicPage.qml
         qml/pages/SearchPage.qml
         qml/pages/PlaylistPage.qml
         qml/pages/FeaturedPlaylistPage.qml
-        qml/pages/SettingsPage.qml
     )
 
 target_include_directories(MusicQuick PRIVATE "${CMAKE_SOURCE_DIR}/src")
@@ -178,8 +191,15 @@ target_link_libraries(MusicQuick PRIVATE
 )
 
 if(WIN32 AND NOT ANDROID)
+    set(MUSICQUICK_APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/app.ico")
     set_target_properties(MusicQuick PROPERTIES WIN32_EXECUTABLE TRUE)
-    target_sources(MusicQuick PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.rc")
+    if(EXISTS "${MUSICQUICK_APP_ICON}")
+        target_sources(MusicQuick PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.rc")
+        set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.rc"
+            PROPERTIES OBJECT_DEPENDS "${MUSICQUICK_APP_ICON}")
+    else()
+        message(WARNING "Windows app icon missing: ${MUSICQUICK_APP_ICON}")
+    endif()
 endif()
 
 if(NOT ANDROID)
@@ -190,6 +210,8 @@ set(MUSICQUICK_APP_CONTROLLER_SOURCES
     src/app/FeaturedPlaylistCatalog.h
     src/app/FeaturedPlaylistCacheStore.cpp
     src/app/FeaturedPlaylistCacheStore.h
+    src/app/MediaCacheManager.cpp
+    src/app/MediaCacheManager.h
     src/app/PlaylistStore.cpp
     src/app/PlaylistStore.h
     src/app/PlaylistTrackModel.cpp

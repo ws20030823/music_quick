@@ -1,4 +1,4 @@
-// Main.qml — 网易云布局：左侧栏 | 右侧内容区 | 全宽底栏
+// Main.qml — 卡片式布局：侧栏卡片 | 主内容卡片 | 底栏卡片
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -14,8 +14,15 @@ ApplicationWindow {
     minimumHeight: 620
     visible: true
     title: qsTr("WingSound")
-    color: Theme.bgBase
+    color: "transparent"
     flags: Qt.Window | Qt.FramelessWindowHint
+
+    readonly property real skinCardOpacity: app.uiBackgroundOpacity
+
+    background: WallpaperBackground {
+        wallpaperSource: app.hasHomeWallpaper ? app.homeWallpaperUrl : ""
+        skinOpacity: app.uiBackgroundOpacity
+    }
 
     FileDialog {
         id: importDialog
@@ -31,71 +38,129 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 0
+        anchors.margins: Theme.shellPadding
+        spacing: Theme.cardGap
 
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 0
+            spacing: Theme.cardGap
 
-            AppSidebar {
+            SurfaceCard {
+                id: sidebarCard
                 Layout.preferredWidth: Theme.sidebarWidth
                 Layout.minimumWidth: Theme.sidebarWidth
                 Layout.fillHeight: true
-                window: root
-                currentPage: app.currentPage
-                onNavigate: function(page) { root.navigateTo(page) }
+                cardOpacity: root.skinCardOpacity
+                clip: true
+
+                AppSidebar {
+                    id: appSidebar
+                    anchors.fill: parent
+                    window: root
+                    currentPage: app.currentPage
+                    enabled: !app.settingsVisible
+                    opacity: app.settingsVisible ? 0 : 1
+                    Behavior on opacity {
+                        enabled: !Theme.reduceMotion
+                        NumberAnimation { duration: 220 }
+                    }
+                    onNavigate: function(page) { root.navigateTo(page) }
+                }
+
+                StaggeredMenu {
+                    id: settingsMenu
+                    anchors.fill: parent
+                    z: 2
+                    items: [
+                        { label: qsTr("个人") },
+                        { label: qsTr("常规") },
+                        { label: qsTr("系统") },
+                        { label: qsTr("换肤") }
+                    ]
+                    colors: ["#C8D9F0", Theme.accent]
+                    position: "left"
+                    opened: app.settingsVisible
+                    currentIndex: app.settingsSection
+                    accentColor: Theme.accent
+                    showCloseButton: true
+                    cardOpacity: root.skinCardOpacity
+                    onItemSelected: function(index) { app.settingsSection = index }
+                    onCloseRequested: app.closeSettings()
+                }
             }
 
-            ColumnLayout {
+            SurfaceCard {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 0
+                cardOpacity: root.skinCardOpacity
 
-                TopBar {
-                    id: topBar
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Theme.topBarHeight
-                    window: root
-                    onSearchSubmitted: function(keyword) {
-                        app.searchOnline(keyword, 1)
-                        root.navigateTo(3)
-                    }
-                }
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 0
 
-                Connections {
-                    target: app
-                    function onSearchKeywordChanged() {
-                        if (topBar.searchField.text !== app.searchKeyword) {
-                            topBar.searchField.text = app.searchKeyword
+                    TopBar {
+                        id: topBar
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Theme.topBarHeight
+                        window: root
+                        onSearchSubmitted: function(keyword) {
+                            app.searchOnline(keyword, 1)
+                            root.navigateTo(3)
                         }
                     }
-                }
 
-                StackLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    currentIndex: app.currentPage
-
-                    DiscoverPage { }
-                    HomePage { }
-                    LocalMusicPage {
-                        trackModel: app.trackModel
-                        onImportClicked: importDialog.open()
+                    Connections {
+                        target: app
+                        function onSearchKeywordChanged() {
+                            if (topBar.searchField.text !== app.searchKeyword) {
+                                topBar.searchField.text = app.searchKeyword
+                            }
+                        }
                     }
-                    SearchPage { }
-                    PlaylistPage { }
-                    FeaturedPlaylistPage { }
-                    SettingsPage { }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        StackLayout {
+                            id: mainPages
+                            anchors.fill: parent
+                            visible: !app.settingsVisible
+                            enabled: !app.settingsVisible
+                            currentIndex: app.currentPage
+
+                            DiscoverPage { }
+                            HomePage { }
+                            LocalMusicPage {
+                                trackModel: app.trackModel
+                                onImportClicked: importDialog.open()
+                            }
+                            SearchPage { }
+                            PlaylistPage { }
+                            FeaturedPlaylistPage { }
+                        }
+
+                        SettingsContentView {
+                            anchors.fill: parent
+                            visible: app.settingsVisible
+                            section: app.settingsSection
+                        }
+                    }
                 }
             }
         }
 
-        PlaybackBar {
+        SurfaceCard {
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.playbackBarHeight
             Layout.minimumHeight: Theme.playbackBarHeight
-            window: root
+            cardOpacity: root.skinCardOpacity
+
+            PlaybackBar {
+                anchors.fill: parent
+                window: root
+            }
         }
     }
 

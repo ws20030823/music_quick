@@ -9,6 +9,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QQuickWindow>
 #include <QFile>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -36,6 +37,7 @@ int main(int argc, char* argv[])
 {
     startupLog(QStringLiteral("main: enter"));
     QGuiApplication app(argc, argv);
+    QQuickWindow::setDefaultAlphaBuffer(true);
     startupLog(QStringLiteral("main: QGuiApplication created"));
     QGuiApplication::setOrganizationName(QStringLiteral("WingSound"));
     QGuiApplication::setApplicationName(QStringLiteral("WingSound"));

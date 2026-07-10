@@ -54,7 +54,7 @@ Rectangle {
         anchors.bottom: parent.bottom
         width: parent.width
         height: 1
-        color: Theme.borderStrong
+        color: Theme.border
     }
 
     RowLayout {
@@ -241,15 +241,16 @@ Rectangle {
             implicitWidth: 32
             implicitHeight: 32
             ToolTip.text: qsTr("设置")
-            onClicked: app.navigateToPage(6)
+            onClicked: app.toggleSettings()
             background: Rectangle {
                 radius: 8
-                color: parent.hovered ? Theme.bgHover : "transparent"
+                color: app.settingsVisible ? Theme.accentSoft
+                     : (parent.hovered ? Theme.bgHover : "transparent")
             }
             contentItem: AppIcon {
                 name: Icons.settings
                 size: 16
-                color: Theme.textSecondary
+                color: app.settingsVisible ? Theme.accent : Theme.textSecondary
                 anchors.centerIn: parent
             }
         }

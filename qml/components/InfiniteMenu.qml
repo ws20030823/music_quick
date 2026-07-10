@@ -164,7 +164,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: root.immersiveDark ? "#0B0B0F" : Theme.bgCard
+        color: root.immersiveDark ? "#0B0B0F" : "transparent"
         z: -2
     }
 

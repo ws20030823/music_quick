@@ -10,11 +10,35 @@ Rectangle {
     implicitWidth: Theme.sidebarWidth
 
     property int currentPage: 0
+    property string pendingDeletePlaylistId: ""
+    property string pendingDeletePlaylistName: ""
     signal navigate(int page)
 
     CreatePlaylistDialog {
         id: createPlaylistDialog
         parent: Overlay.overlay
+    }
+
+    CardDialog {
+        id: deletePlaylistConfirm
+        parent: Overlay.overlay
+        heading: qsTr("删除歌单")
+        description: pendingDeletePlaylistName.length > 0
+                     ? qsTr("确定删除「%1」？此操作不可恢复。").arg(pendingDeletePlaylistName)
+                     : qsTr("确定删除此歌单？此操作不可恢复。")
+        primaryText: qsTr("删除")
+        secondaryText: qsTr("取消")
+        destructive: true
+        onAccepted: {
+            if (pendingDeletePlaylistId.length > 0)
+                app.deletePlaylist(pendingDeletePlaylistId)
+            pendingDeletePlaylistId = ""
+            pendingDeletePlaylistName = ""
+        }
+        onRejected: {
+            pendingDeletePlaylistId = ""
+            pendingDeletePlaylistName = ""
+        }
     }
 
     ScrollView {
@@ -103,7 +127,11 @@ Rectangle {
                     subtitle: modelData.trackCount > 0
                              ? qsTr("%1 首").arg(modelData.trackCount) : ""
                     showDelete: !modelData.builtin
-                    onDeleteClicked: app.deletePlaylist(modelData.id)
+                    onDeleteClicked: {
+                        pendingDeletePlaylistId = modelData.id
+                        pendingDeletePlaylistName = modelData.name
+                        deletePlaylistConfirm.open()
+                    }
                 }
             }
         }

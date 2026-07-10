@@ -11,6 +11,7 @@
 
 #include "app/FeaturedPlaylistCatalog.h"
 #include "app/FeaturedPlaylistCacheStore.h"
+#include "app/MediaCacheManager.h"
 #include "app/PlaylistStore.h"
 #include "app/PlaylistTrackModel.h"
 #include "app/SearchResultModel.h"
@@ -94,6 +95,16 @@ class AppController final : public QObject
 
     Q_PROPERTY(bool canNavigateBack READ canNavigateBack NOTIFY canNavigateBackChanged)
 
+    Q_PROPERTY(QString cacheDirectory READ cacheDirectory WRITE setCacheDirectory NOTIFY cacheSettingsChanged)
+    Q_PROPERTY(int cacheMaxSizeMb READ cacheMaxSizeMb WRITE setCacheMaxSizeMb NOTIFY cacheSettingsChanged)
+    Q_PROPERTY(QString cacheUsedText READ cacheUsedText NOTIFY cacheUsageChanged)
+    Q_PROPERTY(qreal uiBackgroundOpacity READ uiBackgroundOpacity WRITE setUiBackgroundOpacity NOTIFY appearanceSettingsChanged)
+    Q_PROPERTY(bool hasHomeWallpaper READ hasHomeWallpaper NOTIFY appearanceSettingsChanged)
+    Q_PROPERTY(QString homeWallpaperPath READ homeWallpaperPath WRITE setHomeWallpaperPath NOTIFY appearanceSettingsChanged)
+    Q_PROPERTY(QUrl homeWallpaperUrl READ homeWallpaperUrl NOTIFY appearanceSettingsChanged)
+    Q_PROPERTY(bool launchAtStartup READ launchAtStartup WRITE setLaunchAtStartup NOTIFY generalSettingsChanged)
+    Q_PROPERTY(bool settingsVisible READ settingsVisible WRITE setSettingsVisible NOTIFY settingsVisibleChanged)
+    Q_PROPERTY(int settingsSection READ settingsSection WRITE setSettingsSection NOTIFY settingsSectionChanged)
 
 public:
     explicit AppController(QObject* parent = nullptr);
@@ -200,6 +211,32 @@ public:
     Q_INVOKABLE void navigateToPage(int page);
     Q_INVOKABLE void navigateBack();
 
+    QString cacheDirectory() const;
+    void setCacheDirectory(const QString& path);
+    int cacheMaxSizeMb() const;
+    void setCacheMaxSizeMb(int megabytes);
+    QString cacheUsedText() const;
+    Q_INVOKABLE void refreshCacheUsage();
+    Q_INVOKABLE void clearMediaCache();
+
+    qreal uiBackgroundOpacity() const;
+    void setUiBackgroundOpacity(qreal value);
+    bool hasHomeWallpaper() const;
+    QString homeWallpaperPath() const;
+    void setHomeWallpaperPath(const QString& path);
+    QUrl homeWallpaperUrl() const;
+    bool launchAtStartup() const;
+    void setLaunchAtStartup(bool enabled);
+
+    bool settingsVisible() const;
+    void setSettingsVisible(bool visible);
+    int settingsSection() const;
+    void setSettingsSection(int section);
+    Q_INVOKABLE void toggleSettings();
+    Q_INVOKABLE void openSettings(int section);
+    Q_INVOKABLE void requestCloseSettings();
+    Q_INVOKABLE void closeSettings();
+
     Q_INVOKABLE void refreshActivePlaylist();
     Q_INVOKABLE void playPlaylistRow(int row);
     Q_INVOKABLE void removePlaylistTrack(int row);
@@ -235,6 +272,13 @@ signals:
     void favoriteFeaturedPlaylistsChanged();
     void activeFeaturedPlaylistChanged();
     void canNavigateBackChanged();
+    void cacheSettingsChanged();
+    void cacheUsageChanged();
+    void appearanceSettingsChanged();
+    void generalSettingsChanged();
+    void settingsVisibleChanged();
+    void settingsSectionChanged();
+    void settingsCloseRequested();
 
 private slots:
     void onSearchCompleted(const SearchPageResult& result, const QString& keyword);
@@ -283,6 +327,10 @@ private:
     void pushNavState();
     void loadFavoriteFeaturedPlaylists();
     void saveFavoriteFeaturedPlaylists() const;
+    void loadAppearanceSettings();
+    void saveAppearanceSettings() const;
+    void loadGeneralSettings();
+    void saveGeneralSettings() const;
 
     void reloadActivePlaylistModel();
     PlaylistTrackRef trackRefFromSearchRow(int row) const;
@@ -317,6 +365,7 @@ private:
     SearchResultModel m_searchResultModel;
     PlaylistTrackModel m_playlistTrackModel;
     PlaylistStore m_playlistStore;
+    MediaCacheManager m_mediaCache;
     AudioPlayer m_audioPlayer;
     PlaybackController m_playbackController;
     MusicSourceRegistry m_sourceRegistry;
@@ -383,4 +432,10 @@ private:
     bool m_streamPrefetchInFlight = false;
     int m_activeStreamPrefetchRow = -1;
     static constexpr int kStreamPrefetchCount = 3;
+
+    qreal m_uiBackgroundOpacity = 1.0;
+    QString m_homeWallpaperPath;
+    bool m_launchAtStartup = false;
+    bool m_settingsVisible = false;
+    int m_settingsSection = 0;
 };

@@ -9,6 +9,7 @@
 #include "network/OnlineStreamLoader.h"
 #include "network/StreamFetchOptions.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -88,6 +89,7 @@ QString registrySourceLabel(const MusicSourceRegistry& registry,
 AppController::AppController(QObject* parent)
     : QObject(parent)
     , m_playbackController(this)
+    , m_mediaCache(this)
     , m_streamLoader(new OnlineStreamLoader(this))
 {
     m_sourceRegistry.registerSource(new MyFreeMp3Client(this));
@@ -158,6 +160,10 @@ AppController::AppController(QObject* parent)
     m_activePlaylistId = QStringLiteral("liked");
     reloadActivePlaylistModel();
     loadFavoriteFeaturedPlaylists();
+    loadAppearanceSettings();
+    loadGeneralSettings();
+    connect(&m_mediaCache, &MediaCacheManager::settingsChanged, this, &AppController::cacheSettingsChanged);
+    connect(&m_mediaCache, &MediaCacheManager::usageChanged, this, &AppController::cacheUsageChanged);
     syncLocalLikedStates();
     syncPlaylistLikedStates();
 
@@ -2207,4 +2213,183 @@ void AppController::toggleCurrentLike()
     syncLocalLikedStates();
     syncPlaylistLikedStates();
     emit currentLikeChanged();
+}
+
+QString AppController::cacheDirectory() const
+{
+    return m_mediaCache.rootPath();
+}
+
+void AppController::setCacheDirectory(const QString& path)
+{
+    m_mediaCache.setRootPath(path);
+}
+
+int AppController::cacheMaxSizeMb() const
+{
+    return m_mediaCache.maxSizeMb();
+}
+
+void AppController::setCacheMaxSizeMb(int megabytes)
+{
+    m_mediaCache.setMaxSizeMb(megabytes);
+}
+
+QString AppController::cacheUsedText() const
+{
+    return m_mediaCache.usedBytesText();
+}
+
+void AppController::refreshCacheUsage()
+{
+    emit cacheUsageChanged();
+}
+
+void AppController::clearMediaCache()
+{
+    m_mediaCache.clearAll();
+    setStatus(QStringLiteral("缓存已清空"));
+}
+
+qreal AppController::uiBackgroundOpacity() const
+{
+    return m_uiBackgroundOpacity;
+}
+
+void AppController::setUiBackgroundOpacity(qreal value)
+{
+    const qreal clamped = qBound(0.0, value, 1.0);
+    if (qFuzzyCompare(m_uiBackgroundOpacity, clamped)) {
+        return;
+    }
+    m_uiBackgroundOpacity = clamped;
+    saveAppearanceSettings();
+    emit appearanceSettingsChanged();
+}
+
+bool AppController::hasHomeWallpaper() const
+{
+    return !m_homeWallpaperPath.isEmpty();
+}
+
+void AppController::setHomeWallpaperPath(const QString& path)
+{
+    const QString trimmed = path.trimmed();
+    QString normalized;
+    if (trimmed.startsWith(QStringLiteral("file:"), Qt::CaseInsensitive)) {
+        normalized = QDir::fromNativeSeparators(QUrl(trimmed).toLocalFile());
+    } else {
+        normalized = QDir::fromNativeSeparators(trimmed);
+    }
+    if (m_homeWallpaperPath == normalized) {
+        return;
+    }
+
+    m_homeWallpaperPath = normalized;
+    saveAppearanceSettings();
+    emit appearanceSettingsChanged();
+}
+
+QString AppController::homeWallpaperPath() const
+{
+    return m_homeWallpaperPath;
+}
+
+QUrl AppController::homeWallpaperUrl() const
+{
+    if (m_homeWallpaperPath.isEmpty()) {
+        return QUrl();
+    }
+    return QUrl::fromLocalFile(m_homeWallpaperPath);
+}
+
+bool AppController::launchAtStartup() const
+{
+    return m_launchAtStartup;
+}
+
+void AppController::setLaunchAtStartup(bool enabled)
+{
+    if (m_launchAtStartup == enabled) {
+        return;
+    }
+    m_launchAtStartup = enabled;
+    saveGeneralSettings();
+    emit generalSettingsChanged();
+}
+
+void AppController::loadAppearanceSettings()
+{
+    QSettings settings;
+    m_uiBackgroundOpacity = qBound(0.0, settings.value(QStringLiteral("appearance/backgroundOpacity"), 1.0).toReal(), 1.0);
+    m_homeWallpaperPath = settings.value(QStringLiteral("appearance/homeWallpaperPath")).toString();
+}
+
+void AppController::saveAppearanceSettings() const
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("appearance/backgroundOpacity"), m_uiBackgroundOpacity);
+    settings.setValue(QStringLiteral("appearance/homeWallpaperPath"), m_homeWallpaperPath);
+}
+
+void AppController::loadGeneralSettings()
+{
+    QSettings settings;
+    m_launchAtStartup = settings.value(QStringLiteral("general/launchAtStartup"), false).toBool();
+}
+
+void AppController::saveGeneralSettings() const
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("general/launchAtStartup"), m_launchAtStartup);
+}
+
+bool AppController::settingsVisible() const
+{
+    return m_settingsVisible;
+}
+
+void AppController::setSettingsVisible(bool visible)
+{
+    if (m_settingsVisible == visible) {
+        return;
+    }
+    m_settingsVisible = visible;
+    emit settingsVisibleChanged();
+}
+
+int AppController::settingsSection() const
+{
+    return m_settingsSection;
+}
+
+void AppController::setSettingsSection(int section)
+{
+    const int clamped = qBound(0, section, 3);
+    if (m_settingsSection == clamped) {
+        return;
+    }
+    m_settingsSection = clamped;
+    emit settingsSectionChanged();
+}
+
+void AppController::toggleSettings()
+{
+    setSettingsVisible(!m_settingsVisible);
+}
+
+void AppController::openSettings(int section)
+{
+    setSettingsSection(section);
+    setSettingsVisible(true);
+}
+
+void AppController::requestCloseSettings()
+{
+    closeSettings();
+}
+
+void AppController::closeSettings()
+{
+    setSettingsVisible(false);
 }

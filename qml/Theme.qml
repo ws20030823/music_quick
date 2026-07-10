@@ -6,17 +6,17 @@ import QtQuick
 QtObject {
     // ── 背景色 ──
 
-    // 主内容区背景（窗口底色、列表表头等）
-    readonly property color bgBase: "#F3F3F7"
+    // 主内容区背景（窗口底色、卡片间隙）
+    readonly property color bgBase: "#EBEEF3"
 
-    // 左侧导航栏背景
-    readonly property color bgSidebar: "#E4E8EE"
+    // 左侧导航栏背景（卡片内与 bgCard 一致）
+    readonly property color bgSidebar: "#FFFFFF"
 
     // 卡片/顶栏/底栏/弹窗等白色面板
     readonly property color bgCard: "#FFFFFF"
 
-    // 顶栏背景（网易云浅灰）
-    readonly property color topBarBg: "#F4F4F5"
+    // 顶栏背景（嵌入主内容卡片时为透明）
+    readonly property color topBarBg: "transparent"
 
     // 鼠标悬停时的半透明遮罩（约 10% 黑）
     readonly property color bgHover: "#0A000000"
@@ -80,9 +80,19 @@ QtObject {
     readonly property int listCoverSize: 40
     readonly property int logoSize: 28
 
+    // ── 卡片式外壳布局 ──
+    readonly property int shellPadding: 12
+    readonly property int cardGap: 10
+    readonly property int cardShellRadius: 14
+    readonly property color cardBorder: "#E2E8F0"
+    readonly property color shellCardShadow: "#18000000"
+    readonly property real cardShadowBlur: 0.45
+    readonly property int cardShadowOffsetY: 3
+    readonly property int settingsContentMaxWidth: 680
+
     // ── 搜索页（ui-ux-pro-max：搜索 CTA + 卡片层次）──
     readonly property color searchHeroStart: "#E8F4FD"
-    readonly property color searchHeroEnd: "#F3F3F7"
+    readonly property color searchHeroEnd: bgBase
     readonly property int searchChipHeight: 32
     readonly property int searchHeroHeight: 120
 
@@ -128,6 +138,35 @@ QtObject {
     readonly property color cardShadow: "#14000000"
     readonly property int cardHoverLift: 5
     readonly property int cardCoverHoverScaleMs: 300
+
+    // ── 交互卡片对话框（Uiverse 风格）──
+    readonly property int dialogRadius: 20
+    readonly property int dialogPadding: 30
+    readonly property int dialogGap: 20
+    readonly property int dialogContentGap: 5
+    readonly property int dialogMinWidth: 300
+    readonly property int dialogButtonHeight: 35
+    readonly property int dialogButtonRadius: 10
+    readonly property int dialogButtonGap: 10
+    readonly property int dialogShadowOffset: 20
+    readonly property color dialogBg: "#FFFFFF"
+    readonly property color dialogHeading: "#1B1B1B"
+    readonly property color dialogDescription: "#666666"
+    readonly property color dialogPrimary: "#FF726D"
+    readonly property color dialogPrimaryHover: "#FF4942"
+    readonly property color dialogSecondary: "#DDDDDD"
+    readonly property color dialogSecondaryHover: "#C5C5C5"
+    readonly property color dialogExit: "#AFAFAF"
+    readonly property color dialogExitHover: "#1B1B1B"
+    readonly property color dialogShadow: "#12000000"
+
+    // ── 皮肤透明度（0% 滑块仍保留最低可见度）──
+    readonly property real skinOpacityMin: 0.28
+
+    function mapSkinOpacity(raw) {
+        var clamped = Math.max(0, Math.min(1, raw))
+        return skinOpacityMin + clamped * (1.0 - skinOpacityMin)
+    }
 
     // 无障碍：后续可绑定 SystemSettings 或平台 reduced-motion
     readonly property bool reduceMotion: false

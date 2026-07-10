@@ -12,11 +12,12 @@ Item {
         anchors.margins: Theme.pagePadding
         radius: Theme.radiusLg
         clip: true
-        color: Theme.bgCard
+        color: "transparent"
 
         InfiniteMenu {
             id: menu
             anchors.fill: parent
+            z: 1
             items: app.featuredPlaylists
             menuScale: 1.0
             immersiveDark: false

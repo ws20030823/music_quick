@@ -134,18 +134,14 @@ Item {
         }
     }
 
-    Dialog {
+    CardDialog {
         id: deleteConfirm
-        title: qsTr("删除歌单")
-        modal: true
-        anchors.centerIn: parent
-        standardButtons: Dialog.Yes | Dialog.No
-        contentItem: Text {
-            text: qsTr("确定删除「%1」？此操作不可恢复。").arg(app.activePlaylistName)
-            wrapMode: Text.WordWrap
-            color: Theme.textPrimary
-            font.pixelSize: 14
-        }
+        parent: Overlay.overlay
+        heading: qsTr("删除歌单")
+        description: qsTr("确定删除「%1」？此操作不可恢复。").arg(app.activePlaylistName)
+        primaryText: qsTr("删除")
+        secondaryText: qsTr("取消")
+        destructive: true
         onAccepted: app.deletePlaylist(app.activePlaylistId)
     }
 }

@@ -7,7 +7,7 @@ import MusicQuick
 
 Rectangle {
     id: root
-    color: Theme.bgSidebar
+    color: "transparent"
     implicitWidth: Theme.sidebarWidth
 
     required property Window window
@@ -63,13 +63,5 @@ Rectangle {
             currentPage: root.currentPage
             onNavigate: function(page) { root.navigate(page) }
         }
-    }
-
-    Rectangle {
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: 1
-        color: Theme.borderStrong
     }
 }
