@@ -1,21 +1,26 @@
-// SettingsCard.qml — 设置页卡片容器
+// SettingsCard.qml — 设置页卡片容器（半透明蒙层，内容实色）
 import QtQuick
 import QtQuick.Layouts
 import MusicQuick
 
-Rectangle {
+Item {
     id: card
 
     property string title: ""
     property string subtitle: ""
+    property real cardShellAlpha: app.uiCardShellOpacity
     default property alias content: cardContent.data
 
     Layout.fillWidth: true
-    radius: Theme.radiusLg
-    color: Theme.bgBase
-    border.color: Theme.cardBorder
-    border.width: 1
     implicitHeight: cardLayout.implicitHeight + 40
+
+    Rectangle {
+        anchors.fill: parent
+        radius: Theme.radiusLg
+        color: Theme.cardShellTint(card.cardShellAlpha)
+        border.color: Theme.cardShellBorder(card.cardShellAlpha)
+        border.width: 1
+    }
 
     ColumnLayout {
         id: cardLayout
@@ -24,6 +29,7 @@ Rectangle {
         anchors.top: parent.top
         anchors.margins: 20
         spacing: 16
+        z: 1
 
         ColumnLayout {
             Layout.fillWidth: true

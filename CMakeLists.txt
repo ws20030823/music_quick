@@ -36,6 +36,8 @@ qt_add_executable(MusicQuick
     src/media/TrackMetadata.h
     src/app/AppController.cpp
     src/app/AppController.h
+    src/app/AppStorage.cpp
+    src/app/AppStorage.h
     src/app/FeaturedPlaylistCatalog.cpp
     src/app/FeaturedPlaylistCatalog.h
     src/app/FeaturedPlaylistCacheStore.cpp
@@ -48,6 +50,10 @@ qt_add_executable(MusicQuick
     src/app/SearchResultModel.h
     src/app/PlaylistStore.cpp
     src/app/PlaylistStore.h
+    src/app/PlaylistImportManager.cpp
+    src/app/PlaylistImportManager.h
+    src/app/PlaylistImportPreviewModel.cpp
+    src/app/PlaylistImportPreviewModel.h
     src/app/PlaylistTrackModel.cpp
     src/app/PlaylistTrackModel.h
     src/app/MediaCacheManager.cpp
@@ -65,6 +71,10 @@ qt_add_executable(MusicQuick
     src/network/MusicSourceClient.h
     src/network/MusicSourceRegistry.cpp
     src/network/MusicSourceRegistry.h
+    src/network/LocalStreamProxy.cpp
+    src/network/LocalStreamProxy.h
+    src/network/ExternalPlaylistImporter.cpp
+    src/network/ExternalPlaylistImporter.h
     src/network/OnlineSongId.cpp
     src/network/OnlineSongId.h
     src/network/OnlineStreamLoader.cpp
@@ -151,6 +161,7 @@ qt_add_qml_module(MusicQuick
         qml/components/SearchResultList.qml
         qml/components/LocalMusicList.qml
         qml/components/CreatePlaylistDialog.qml
+        qml/components/ImportPlaylistDialog.qml
         qml/components/CardDialog.qml
         qml/components/CardDialogSurface.qml
         qml/components/CardDialogButton.qml
@@ -206,6 +217,8 @@ if(NOT ANDROID)
 set(MUSICQUICK_APP_CONTROLLER_SOURCES
     src/app/AppController.cpp
     src/app/AppController.h
+    src/app/AppStorage.cpp
+    src/app/AppStorage.h
     src/app/FeaturedPlaylistCatalog.cpp
     src/app/FeaturedPlaylistCatalog.h
     src/app/FeaturedPlaylistCacheStore.cpp
@@ -214,6 +227,10 @@ set(MUSICQUICK_APP_CONTROLLER_SOURCES
     src/app/MediaCacheManager.h
     src/app/PlaylistStore.cpp
     src/app/PlaylistStore.h
+    src/app/PlaylistImportManager.cpp
+    src/app/PlaylistImportManager.h
+    src/app/PlaylistImportPreviewModel.cpp
+    src/app/PlaylistImportPreviewModel.h
     src/app/PlaylistTrackModel.cpp
     src/app/PlaylistTrackModel.h
     src/app/SearchResultModel.cpp
@@ -233,6 +250,10 @@ set(MUSICQUICK_APP_CONTROLLER_SOURCES
     src/network/MusicSourceClient.h
     src/network/MusicSourceRegistry.cpp
     src/network/MusicSourceRegistry.h
+    src/network/LocalStreamProxy.cpp
+    src/network/LocalStreamProxy.h
+    src/network/ExternalPlaylistImporter.cpp
+    src/network/ExternalPlaylistImporter.h
     src/network/OnlineSongId.cpp
     src/network/OnlineSongId.h
     src/network/OnlineStreamLoader.cpp
@@ -251,6 +272,8 @@ qt_add_executable(MusicQuickTests
     tests/test_gequbao_parser.h
     tests/test_curl_http_client.cpp
     tests/test_curl_http_client.h
+    tests/test_external_playlist_importer.cpp
+    tests/test_external_playlist_importer.h
     src/core/AudioPlayer.cpp
     src/core/AudioPlayer.h
     src/core/PlaybackController.cpp

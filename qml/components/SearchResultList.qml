@@ -10,13 +10,41 @@ Item {
     property alias model: listView.model
     property bool showRemoveFromPlaylist: false
     property string removeFromPlaylistLabel: qsTr("从歌单移除")
+    property bool batchMode: false
+    property var selectedRows: []
     signal rowSelected(int row)
     signal rowActivated(int row)
     signal likeClicked(int row)
     signal addToPlaylist(int row, string playlistId)
     signal removeFromPlaylist(int row)
+    signal selectionChanged()
 
     property int contextRow: -1
+
+    function isRowBatchSelected(row) {
+        return selectedRows.indexOf(row) >= 0
+    }
+
+    function clearBatchSelection() {
+        selectedRows = []
+        selectionChanged()
+    }
+
+    function toggleBatchRow(row) {
+        const copy = selectedRows.slice()
+        const idx = copy.indexOf(row)
+        if (idx >= 0)
+            copy.splice(idx, 1)
+        else
+            copy.push(row)
+        selectedRows = copy
+        selectionChanged()
+    }
+
+    onBatchModeChanged: {
+        if (!batchMode)
+            clearBatchSelection()
+    }
 
     // ── 表头 ──
     Rectangle {
@@ -102,6 +130,14 @@ Item {
                     anchors.leftMargin: Theme.pagePadding
                     anchors.rightMargin: Theme.pagePadding
                     spacing: 12
+
+                    CheckBox {
+                        visible: root.batchMode
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 28
+                        checked: root.isRowBatchSelected(index)
+                        onClicked: root.toggleBatchRow(index)
+                    }
 
                     // 序号 / 播放态
                     Item {
@@ -193,6 +229,10 @@ Item {
                             rowContextMenu.popup()
                             return
                         }
+                        if (root.batchMode) {
+                            root.toggleBatchRow(index)
+                            return
+                        }
                         root.rowSelected(index)
                     }
                     onDoubleClicked: root.rowActivated(index)
@@ -209,6 +249,7 @@ Item {
         }
 
         MenuItem {
+            height: root.showRemoveFromPlaylist ? implicitHeight : 0
             visible: root.showRemoveFromPlaylist
             text: root.removeFromPlaylistLabel
             onTriggered: root.removeFromPlaylist(root.contextRow)

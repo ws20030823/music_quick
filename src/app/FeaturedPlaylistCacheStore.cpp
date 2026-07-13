@@ -1,11 +1,12 @@
 #include "app/FeaturedPlaylistCacheStore.h"
 
+#include "app/AppStorage.h"
+
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QStandardPaths>
 #include <QUrl>
 
 namespace {
@@ -44,8 +45,7 @@ OnlineTrack trackFromJson(const QJsonObject& obj)
 
 QString FeaturedPlaylistCacheStore::cacheDirectory()
 {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
-        + QStringLiteral("/featured_playlists");
+    const QString dir = AppStorage::cacheDir() + QStringLiteral("/featured_playlists");
     QDir().mkpath(dir);
     return dir;
 }

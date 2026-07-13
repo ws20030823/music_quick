@@ -1,5 +1,7 @@
 #include "network/OnlineStreamLoader.h"
 
+#include "app/AppStorage.h"
+
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -7,7 +9,6 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QStandardPaths>
 #include <QUrl>
 
 namespace {
@@ -41,8 +42,7 @@ QString OnlineStreamLoader::cacheFilePathFor(const QUrl& streamUrl) const
 {
     const QByteArray hash = QCryptographicHash::hash(
         streamUrl.toString().toUtf8(), QCryptographicHash::Sha1).toHex();
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
-        + QStringLiteral("/streams");
+    const QString base = AppStorage::cacheDir() + QStringLiteral("/streams");
     QDir().mkpath(base);
     return base + QLatin1Char('/') + QString::fromLatin1(hash) + extensionFromUrl(streamUrl);
 }

@@ -73,13 +73,13 @@ Rectangle {
             onClicked: app.navigateBack()
             background: Rectangle {
                 radius: 8
-                color: parent.hovered ? Theme.bgHover : Theme.bgCard
-                border.color: Theme.borderStrong
+                color: parent.hovered ? Theme.bgHover : Theme.fieldBg
+                border.color: Theme.fieldBorder
             }
             contentItem: AppIcon {
                 name: Icons.chevronLeft
                 size: 16
-                color: Theme.textSecondary
+                color: Theme.fieldIcon
                 anchors.centerIn: parent
             }
         }
@@ -120,7 +120,7 @@ Rectangle {
                 rightPadding: sourceCombo.indicator.width + sourceCombo.spacing
                 text: root.sourceLabelAt(sourceCombo.currentIndex)
                 font.pixelSize: 13
-                color: Theme.textPrimary
+                color: Theme.fieldText
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
             }
@@ -130,17 +130,17 @@ Rectangle {
                 y: (sourceCombo.height - height) / 2
                 text: "\u25BE"
                 font.pixelSize: 11
-                color: Theme.textSecondary
+                color: Theme.fieldIcon
             }
 
             background: Rectangle {
                 implicitWidth: 112
                 implicitHeight: Theme.searchChipHeight
                 radius: Theme.searchChipHeight / 2
-                color: sourceCombo.down ? Theme.accentSoft
-                       : (sourceCombo.hovered ? Theme.bgHover : Theme.bgCard)
+                color: sourceCombo.down ? Theme.bgHover
+                       : (sourceCombo.hovered ? Theme.bgHover : Theme.fieldBg)
                 border.color: sourceCombo.activeFocus || sourceCombo.popup.visible
-                              ? Theme.accent : Theme.borderStrong
+                              ? Theme.fieldFocusBorder : Theme.fieldBorder
                 Behavior on border.color { ColorAnimation { duration: 200 } }
             }
 
@@ -150,8 +150,9 @@ Rectangle {
                 text: name
                 font.pixelSize: 13
                 highlighted: sourceCombo.highlightedIndex === index
+                palette.text: Theme.fieldText
                 background: Rectangle {
-                    color: highlighted ? Theme.accentSoft
+                    color: highlighted ? Theme.bgHover
                            : (parent.hovered ? Theme.bgHover : "transparent")
                 }
                 HoverHandler {
@@ -162,6 +163,13 @@ Rectangle {
             HoverHandler {
                 cursorShape: Qt.PointingHandCursor
             }
+
+            popup.background: Rectangle {
+                color: Theme.fieldBg
+                radius: Theme.radiusMd
+                border.color: Theme.fieldBorder
+                border.width: 1
+            }
         }
 
         Rectangle {
@@ -170,8 +178,8 @@ Rectangle {
             Layout.preferredHeight: 34
             Layout.alignment: Qt.AlignVCenter
             radius: 17
-            color: Theme.bgCard
-            border.color: searchInput.activeFocus ? Theme.accent : Theme.borderStrong
+            color: Theme.fieldBg
+            border.color: searchInput.activeFocus ? Theme.fieldFocusBorder : Theme.fieldBorder
 
             Behavior on border.color { ColorAnimation { duration: 200 } }
 
@@ -184,7 +192,7 @@ Rectangle {
                 AppIcon {
                     name: Icons.search
                     size: 15
-                    color: Theme.textTertiary
+                    color: Theme.fieldIcon
                 }
 
                 TextField {
@@ -194,31 +202,12 @@ Rectangle {
                                          ? app.searchKeyword
                                          : qsTr("搜索音乐、歌手")
                     font.pixelSize: 13
-                    color: Theme.textPrimary
-                    placeholderTextColor: Theme.textTertiary
+                    color: Theme.fieldText
+                    placeholderTextColor: Theme.fieldPlaceholder
                     selectByMouse: true
                     background: Item {}
                     onAccepted: root.searchSubmitted(text.trim())
                 }
-            }
-        }
-
-        ToolButton {
-            implicitWidth: 32
-            implicitHeight: 32
-            enabled: false
-            opacity: 0.35
-            Layout.alignment: Qt.AlignVCenter
-            background: Rectangle {
-                radius: 8
-                color: parent.hovered ? Theme.bgHover : Theme.bgCard
-                border.color: Theme.borderStrong
-            }
-            contentItem: AppIcon {
-                name: Icons.mic
-                size: 16
-                color: Theme.textSecondary
-                anchors.centerIn: parent
             }
         }
 
@@ -244,13 +233,13 @@ Rectangle {
             onClicked: app.toggleSettings()
             background: Rectangle {
                 radius: 8
-                color: app.settingsVisible ? Theme.accentSoft
+                color: app.settingsVisible ? Theme.bgHover
                      : (parent.hovered ? Theme.bgHover : "transparent")
             }
             contentItem: AppIcon {
                 name: Icons.settings
                 size: 16
-                color: app.settingsVisible ? Theme.accent : Theme.textSecondary
+                color: app.settingsVisible ? Theme.textPrimary : Theme.textSecondary
                 anchors.centerIn: parent
             }
         }

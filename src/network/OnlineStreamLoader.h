@@ -23,7 +23,7 @@ class OnlineStreamLoader final : public QObject
 public:
     explicit OnlineStreamLoader(QObject* parent = nullptr);
 
-    // 若缓存命中则立即 ready；否则带 Referer 下载到 CacheLocation/streams/
+    // 若缓存命中则立即 ready；否则带 Referer 下载到 AppStorage::cacheDir()/streams/
     void prefetch(const QUrl& streamUrl, const StreamFetchOptions& options = {});
     void cancelActivePrefetch();
 

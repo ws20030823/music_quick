@@ -1,15 +1,13 @@
-// SurfaceCard.qml — 实色卡片，随皮肤不透明度整体变淡
+// SurfaceCard.qml — 半透明白蒙层卡片，内容保持实色
 import QtQuick
 import MusicQuick
 
 Item {
     id: root
 
-    property real cardOpacity: 1.0
+    property real cardShellAlpha: 0.20
 
     default property alias content: contentHost.data
-
-    opacity: Theme.mapSkinOpacity(cardOpacity)
 
     Rectangle {
         id: shadowPlate
@@ -24,13 +22,14 @@ Item {
         id: cardBody
         anchors.fill: parent
         radius: Theme.cardShellRadius
-        color: Theme.bgCard
-        border.color: Theme.cardBorder
+        color: Theme.cardShellTint(cardShellAlpha)
+        border.color: Theme.cardShellBorder(cardShellAlpha)
         border.width: 1
     }
 
     Item {
         id: contentHost
         anchors.fill: parent
+        z: 1
     }
 }

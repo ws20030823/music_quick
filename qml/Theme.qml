@@ -31,14 +31,38 @@ QtObject {
 
     // ── 文字色 ──
 
-    // 主标题、歌曲名等重要文字
-    readonly property color textPrimary: "#1B1B1F"
+    property bool customTextEnabled: false
+    property color customTextBase: "#1B1B1F"
 
-    // 副标题、歌手名、次要说明
-    readonly property color textSecondary: "#6B7280"
+    readonly property color _defaultTextPrimary: "#1B1B1F"
+    readonly property color _defaultTextSecondary: "#3A3A42"
+    readonly property color _defaultTextTertiary: "#52525C"
 
-    // 分区标签、时间戳、占位提示等最弱文字
-    readonly property color textTertiary: "#9CA3AF"
+    function softenText(base, amount) {
+        var t = Math.max(0, Math.min(1, amount))
+        var mix = 0.58
+        return Qt.rgba(
+            base.r + (mix - base.r) * t,
+            base.g + (mix - base.g) * t,
+            base.b + (mix - base.b) * t,
+            1)
+    }
+
+    readonly property color textPrimary: customTextEnabled ? customTextBase : _defaultTextPrimary
+    readonly property color textSecondary: customTextEnabled
+        ? softenText(customTextBase, 0.35)
+        : _defaultTextSecondary
+    readonly property color textTertiary: customTextEnabled
+        ? softenText(customTextBase, 0.62)
+        : _defaultTextTertiary
+
+    // ── 输入控件底（始终浅色半透明蒙层；输入文字固定深色保证可读）──
+    readonly property color fieldBg: Qt.rgba(1, 1, 1, 0.42)
+    readonly property color fieldBorder: Qt.rgba(1, 1, 1, 0.55)
+    readonly property color fieldText: "#1B1B1F"
+    readonly property color fieldPlaceholder: "#6B7280"
+    readonly property color fieldIcon: "#3A3A42"
+    readonly property color fieldFocusBorder: accent
 
     // ── 边框 ──
 
@@ -52,10 +76,10 @@ QtObject {
     // SVG 源文件是黑色，AppIcon 当前直接显示原色；此属性供其他组件引用
 
     // 正常态图标
-    readonly property color iconDefault: "#000000"
+    readonly property color iconDefault: textPrimary
 
     // 禁用态图标（无歌曲、无队列时）
-    readonly property color iconMuted: "#9CA3AF"
+    readonly property color iconMuted: textTertiary
 
     // ── 滑块 ──
 
@@ -105,16 +129,16 @@ QtObject {
     readonly property int searchDurationWidth: 48
     readonly property int searchFileSizeWidth: 56
 
-    // ── 全屏播放页（浅色 + 黑胶左侧 / 白色歌词区）──
-    readonly property color npBg: bgBase
-    readonly property color npPanel: bgCard
+    // ── 全屏播放页（与主界面共用壁纸 + 卡片蒙层）──
+    readonly property color npBg: "transparent"
+    readonly property color npPanel: "transparent"
     readonly property color npText: textPrimary
     readonly property color npTextMuted: textSecondary
     readonly property color npTextDim: textTertiary
-    readonly property color npBorder: borderStrong
-    readonly property color npLyricsBg: bgCard
+    readonly property color npBorder: cardBorder
+    readonly property color npLyricsBg: "transparent"
     readonly property color npLyricsShadow: "#0D000000"
-    readonly property color npVinylStage: "#E8EAEF"
+    readonly property color npVinylStage: cardShellTint(0.12)
     readonly property int npVinylSize: 320
     readonly property int npVinylRotationMs: 18000
     readonly property int npTonearmAnimMs: 550
@@ -123,8 +147,8 @@ QtObject {
 
     // ── 歌词面板（网易云风格）──
     readonly property string npLyricFontFamily: "Microsoft YaHei UI"
-    readonly property color npLyricActive: "#222222"
-    readonly property color npLyricInactive: "#B2B2B2"
+    readonly property color npLyricActive: textPrimary
+    readonly property color npLyricInactive: textSecondary
     readonly property int npLyricActiveSize: 26
     readonly property int npLyricInactiveSize: 17
     readonly property int npLyricLineHeight: 52
@@ -160,12 +184,23 @@ QtObject {
     readonly property color dialogExitHover: "#1B1B1B"
     readonly property color dialogShadow: "#12000000"
 
-    // ── 皮肤透明度（0% 滑块仍保留最低可见度）──
-    readonly property real skinOpacityMin: 0.28
+    // ── 壁纸不透明度（滑杆 0% 仍保留最低可见度）──
+    readonly property real wallpaperOpacityMin: 0.18
 
-    function mapSkinOpacity(raw) {
-        var clamped = Math.max(0, Math.min(1, raw))
-        return skinOpacityMin + clamped * (1.0 - skinOpacityMin)
+    function mapWallpaperOpacity(raw) {
+        var t = Math.max(0, Math.min(1, raw))
+        return wallpaperOpacityMin + t * (1.0 - wallpaperOpacityMin)
+    }
+
+    // ── 卡片白蒙层（独立滑杆，默认约 20%）──
+    function cardShellTint(alpha) {
+        var a = Math.max(0, Math.min(1, alpha))
+        return Qt.rgba(1, 1, 1, a)
+    }
+
+    function cardShellBorder(alpha) {
+        var a = Math.max(0, Math.min(1, alpha))
+        return Qt.rgba(1, 1, 1, Math.min(0.42, a + 0.12))
     }
 
     // 无障碍：后续可绑定 SystemSettings 或平台 reduced-motion

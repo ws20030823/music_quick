@@ -12,6 +12,8 @@
 #include "app/FeaturedPlaylistCatalog.h"
 #include "app/FeaturedPlaylistCacheStore.h"
 #include "app/MediaCacheManager.h"
+#include "app/PlaylistImportManager.h"
+#include "app/PlaylistImportPreviewModel.h"
 #include "app/PlaylistStore.h"
 #include "app/PlaylistTrackModel.h"
 #include "app/SearchResultModel.h"
@@ -20,9 +22,11 @@
 #include "core/PlaybackController.h"
 #include "core/PlaybackMode.h"
 #include "network/MusicSourceRegistry.h"
+#include "network/LocalStreamProxy.h"
 #include "network/OnlineTrack.h"
 #include "network/StreamFetchOptions.h"
 
+#include <QColor>
 #include <QHash>
 #include <QImage>
 #include <QNetworkAccessManager>
@@ -30,6 +34,7 @@
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QMediaPlayer>
 
 class MusicSourceClient;
@@ -75,11 +80,19 @@ class AppController final : public QObject
     Q_PROPERTY(int searchResultCount READ searchResultCount NOTIFY searchResultCountChanged)
 
     Q_PROPERTY(PlaylistTrackModel* playlistTrackModel READ playlistTrackModel CONSTANT)
+    Q_PROPERTY(PlaylistImportPreviewModel* playlistImportModel READ playlistImportModel CONSTANT)
     Q_PROPERTY(QVariantList sidebarPlaylists READ sidebarPlaylists NOTIFY playlistsChanged)
     Q_PROPERTY(QString activePlaylistId READ activePlaylistId WRITE setActivePlaylistId NOTIFY activePlaylistIdChanged)
     Q_PROPERTY(QString activePlaylistName READ activePlaylistName NOTIFY activePlaylistContentChanged)
     Q_PROPERTY(int activePlaylistTrackCount READ activePlaylistTrackCount NOTIFY activePlaylistContentChanged)
     Q_PROPERTY(int likedTrackCount READ likedTrackCount NOTIFY playlistsChanged)
+    Q_PROPERTY(bool playlistImportBusy READ playlistImportBusy NOTIFY playlistImportBusyChanged)
+    Q_PROPERTY(QString playlistImportStatus READ playlistImportStatus NOTIFY playlistImportStatusChanged)
+    Q_PROPERTY(QString playlistImportPlatform READ playlistImportPlatform NOTIFY playlistImportPlatformChanged)
+    Q_PROPERTY(int playlistImportMatchedCount READ playlistImportMatchedCount NOTIFY playlistImportCountsChanged)
+    Q_PROPERTY(int playlistImportUnmatchedCount READ playlistImportUnmatchedCount NOTIFY playlistImportCountsChanged)
+    Q_PROPERTY(int playlistImportProcessedCount READ playlistImportProcessedCount NOTIFY playlistImportCountsChanged)
+    Q_PROPERTY(int playlistImportTotalCount READ playlistImportTotalCount NOTIFY playlistImportCountsChanged)
 
     Q_PROPERTY(QString activeMusicSourceId READ activeMusicSourceId WRITE setActiveMusicSourceId NOTIFY activeMusicSourceChanged)
     Q_PROPERTY(QString activeMusicSourceName READ activeMusicSourceName NOTIFY activeMusicSourceChanged)
@@ -99,9 +112,12 @@ class AppController final : public QObject
     Q_PROPERTY(int cacheMaxSizeMb READ cacheMaxSizeMb WRITE setCacheMaxSizeMb NOTIFY cacheSettingsChanged)
     Q_PROPERTY(QString cacheUsedText READ cacheUsedText NOTIFY cacheUsageChanged)
     Q_PROPERTY(qreal uiBackgroundOpacity READ uiBackgroundOpacity WRITE setUiBackgroundOpacity NOTIFY appearanceSettingsChanged)
+    Q_PROPERTY(qreal uiCardShellOpacity READ uiCardShellOpacity WRITE setUiCardShellOpacity NOTIFY appearanceSettingsChanged)
     Q_PROPERTY(bool hasHomeWallpaper READ hasHomeWallpaper NOTIFY appearanceSettingsChanged)
     Q_PROPERTY(QString homeWallpaperPath READ homeWallpaperPath WRITE setHomeWallpaperPath NOTIFY appearanceSettingsChanged)
     Q_PROPERTY(QUrl homeWallpaperUrl READ homeWallpaperUrl NOTIFY appearanceSettingsChanged)
+    Q_PROPERTY(bool uiCustomTextColorEnabled READ uiCustomTextColorEnabled WRITE setUiCustomTextColorEnabled NOTIFY appearanceSettingsChanged)
+    Q_PROPERTY(QColor uiTextColor READ uiTextColor WRITE setUiTextColor NOTIFY appearanceSettingsChanged)
     Q_PROPERTY(bool launchAtStartup READ launchAtStartup WRITE setLaunchAtStartup NOTIFY generalSettingsChanged)
     Q_PROPERTY(bool settingsVisible READ settingsVisible WRITE setSettingsVisible NOTIFY settingsVisibleChanged)
     Q_PROPERTY(int settingsSection READ settingsSection WRITE setSettingsSection NOTIFY settingsSectionChanged)
@@ -154,12 +170,20 @@ public:
     int searchResultCount() const;
 
     PlaylistTrackModel* playlistTrackModel();
+    PlaylistImportPreviewModel* playlistImportModel();
     QVariantList sidebarPlaylists() const;
     QString activePlaylistId() const;
     void setActivePlaylistId(const QString& id);
     QString activePlaylistName() const;
     int activePlaylistTrackCount() const;
     int likedTrackCount() const;
+    bool playlistImportBusy() const;
+    QString playlistImportStatus() const;
+    QString playlistImportPlatform() const;
+    int playlistImportMatchedCount() const;
+    int playlistImportUnmatchedCount() const;
+    int playlistImportProcessedCount() const;
+    int playlistImportTotalCount() const;
 
     QVariantList featuredPlaylists() const;
     QVariantList favoriteFeaturedPlaylists() const;
@@ -204,6 +228,11 @@ public:
     Q_INVOKABLE QString createPlaylist(const QString& name);
     Q_INVOKABLE bool deletePlaylist(const QString& id);
     Q_INVOKABLE void openPlaylist(const QString& id);
+    Q_INVOKABLE void previewExternalPlaylist(const QString& url);
+    Q_INVOKABLE QVariantMap confirmPlaylistImport(const QString& targetPlaylistId,
+                                                  const QString& newPlaylistName = {});
+    Q_INVOKABLE void cancelPlaylistImport();
+    Q_INVOKABLE void clearPlaylistImportPreview();
     Q_INVOKABLE void openFeaturedPlaylist(const QString& id);
     Q_INVOKABLE void toggleFavoriteFeaturedPlaylist();
     Q_INVOKABLE bool isFeaturedPlaylistFavorited(const QString& id) const;
@@ -221,10 +250,16 @@ public:
 
     qreal uiBackgroundOpacity() const;
     void setUiBackgroundOpacity(qreal value);
+    qreal uiCardShellOpacity() const;
+    void setUiCardShellOpacity(qreal value);
     bool hasHomeWallpaper() const;
     QString homeWallpaperPath() const;
     void setHomeWallpaperPath(const QString& path);
     QUrl homeWallpaperUrl() const;
+    bool uiCustomTextColorEnabled() const;
+    void setUiCustomTextColorEnabled(bool value);
+    QColor uiTextColor() const;
+    void setUiTextColor(const QColor& value);
     bool launchAtStartup() const;
     void setLaunchAtStartup(bool enabled);
 
@@ -241,6 +276,7 @@ public:
     Q_INVOKABLE void playPlaylistRow(int row);
     Q_INVOKABLE void removePlaylistTrack(int row);
     Q_INVOKABLE void removeTrackFromActivePlaylist(int row);
+    Q_INVOKABLE int removeTracksFromActivePlaylist(const QVariantList& rows);
     Q_INVOKABLE void toggleLikePlaylistRow(int row);
     Q_INVOKABLE bool isPlaylistRowLiked(int row) const;
     Q_INVOKABLE void toggleCurrentLike();
@@ -268,6 +304,10 @@ signals:
     void playlistsChanged();
     void activePlaylistIdChanged();
     void activePlaylistContentChanged();
+    void playlistImportBusyChanged();
+    void playlistImportStatusChanged();
+    void playlistImportPlatformChanged();
+    void playlistImportCountsChanged();
     void activeMusicSourceChanged();
     void favoriteFeaturedPlaylistsChanged();
     void activeFeaturedPlaylistChanged();
@@ -306,8 +346,10 @@ private:
     void downloadNowPlayingCover(const QUrl& coverUrl, const QString& songId = {});
     void beginOnlinePlaybackUi(const QString& subtitle);
     void queueSearchStreamPrefetch();
+    void queueAdjacentOnlineStreamPrefetch();
     void startNextStreamPrefetch();
     void cancelStreamUrlPrefetch();
+    void prefetchResolvedOnlineStream(const QString& streamUrl, const QString& sourceId);
     void syncSearchLikedStates();
     void syncLocalLikedStates();
     void syncPlaylistLikedStates();
@@ -348,6 +390,11 @@ private:
 
     enum class OnlineQueueType { None, Search, Playlist };
 
+    struct StreamPrefetchRequest {
+        OnlineQueueType type = OnlineQueueType::None;
+        int row = -1;
+    };
+
     struct FeaturedSearchRequest {
         QString playlistId;
         QString keyword;
@@ -365,11 +412,14 @@ private:
     SearchResultModel m_searchResultModel;
     PlaylistTrackModel m_playlistTrackModel;
     PlaylistStore m_playlistStore;
+    PlaylistImportManager* m_playlistImportManager = nullptr;
     MediaCacheManager m_mediaCache;
     AudioPlayer m_audioPlayer;
     PlaybackController m_playbackController;
     MusicSourceRegistry m_sourceRegistry;
     OnlineStreamLoader* m_streamLoader = nullptr;
+    OnlineStreamLoader* m_backgroundStreamLoader = nullptr;
+    LocalStreamProxy* m_streamProxy = nullptr;
     QNetworkAccessManager m_coverNetwork;
 
     bool m_pendingStreamAutoPlay = false;
@@ -422,19 +472,23 @@ private:
     bool m_navigatingBack = false;
 
     int m_pendingPlaylistRow = -1;
-    QString m_activeMusicSourceId = QStringLiteral("myfreemp3");
+    QString m_activeMusicSourceId = QStringLiteral("gequbao");
     QVariantList m_musicSources;
 
     OnlineQueueType m_onlineQueueType = OnlineQueueType::None;
     int m_onlineQueueRow = -1;
 
-    QList<int> m_streamPrefetchQueue;
+    QList<StreamPrefetchRequest> m_streamPrefetchQueue;
     bool m_streamPrefetchInFlight = false;
+    OnlineQueueType m_activeStreamPrefetchType = OnlineQueueType::None;
     int m_activeStreamPrefetchRow = -1;
     static constexpr int kStreamPrefetchCount = 3;
 
     qreal m_uiBackgroundOpacity = 1.0;
+    qreal m_uiCardShellOpacity = 0.20;
     QString m_homeWallpaperPath;
+    bool m_uiCustomTextColorEnabled = false;
+    QColor m_uiTextColor = QColor(QStringLiteral("#1B1B1F"));
     bool m_launchAtStartup = false;
     bool m_settingsVisible = false;
     int m_settingsSection = 0;

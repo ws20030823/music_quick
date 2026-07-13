@@ -1,5 +1,6 @@
 #include "app/PlaylistStore.h"
 
+#include "app/AppStorage.h"
 #include "network/OnlineSongId.h"
 
 #include <QDir>
@@ -8,7 +9,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QStandardPaths>
+#include <QSet>
 #include <QUuid>
 
 namespace {
@@ -73,7 +74,7 @@ const QVector<PlaylistInfo>& PlaylistStore::playlists() const
 
 QString PlaylistStore::storagePath() const
 {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    const QString dir = AppStorage::appDataDir();
     QDir().mkpath(dir);
     return dir + QStringLiteral("/playlists.json");
 }
@@ -221,6 +222,45 @@ bool PlaylistStore::addTrack(const QString& playlistId, const PlaylistTrackRef& 
     save();
     emit playlistsChanged();
     return true;
+}
+
+PlaylistAddResult PlaylistStore::addTracks(const QString& playlistId,
+                                           const QVector<PlaylistTrackRef>& tracks)
+{
+    PlaylistAddResult result;
+    const int idx = indexOfPlaylist(playlistId);
+    if (idx < 0) {
+        result.invalid = tracks.size();
+        return result;
+    }
+
+    PlaylistInfo& playlist = m_playlists[idx];
+    QSet<QString> existingIds;
+    existingIds.reserve(playlist.tracks.size() + tracks.size());
+    for (const PlaylistTrackRef& existing : playlist.tracks) {
+        existingIds.insert(existing.songId);
+    }
+
+    for (PlaylistTrackRef track : tracks) {
+        normalizeTrackRef(track);
+        if (track.songId.isEmpty()) {
+            ++result.invalid;
+            continue;
+        }
+        if (existingIds.contains(track.songId)) {
+            ++result.duplicate;
+            continue;
+        }
+        playlist.tracks.append(track);
+        existingIds.insert(track.songId);
+        ++result.added;
+    }
+
+    if (result.added > 0) {
+        save();
+        emit playlistsChanged();
+    }
+    return result;
 }
 
 bool PlaylistStore::removeTrack(const QString& playlistId, const QString& songId)

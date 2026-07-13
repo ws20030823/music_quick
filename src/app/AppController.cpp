@@ -1,5 +1,6 @@
 #include "app/AppController.h"
 
+#include "app/AppStorage.h"
 #include "media/TrackMetadataReader.h"
 #include "network/GequbaoClient.h"
 #include "network/MusicSourceClient.h"
@@ -14,8 +15,12 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSettings>
+#include <QSet>
 #include <QTimer>
 #include <QUrl>
+
+#include <algorithm>
+#include <functional>
 
 namespace {
 
@@ -89,8 +94,11 @@ QString registrySourceLabel(const MusicSourceRegistry& registry,
 AppController::AppController(QObject* parent)
     : QObject(parent)
     , m_playbackController(this)
+    , m_playlistImportManager(new PlaylistImportManager(this))
     , m_mediaCache(this)
     , m_streamLoader(new OnlineStreamLoader(this))
+    , m_backgroundStreamLoader(new OnlineStreamLoader(this))
+    , m_streamProxy(new LocalStreamProxy(this))
 {
     m_sourceRegistry.registerSource(new MyFreeMp3Client(this));
     m_sourceRegistry.registerSource(new GequbaoClient(this));
@@ -157,6 +165,21 @@ AppController::AppController(QObject* parent)
         emit playlistsChanged();
     });
 
+    connect(m_playlistImportManager, &PlaylistImportManager::busyChanged,
+            this, &AppController::playlistImportBusyChanged);
+    connect(m_playlistImportManager, &PlaylistImportManager::statusChanged,
+            this, &AppController::playlistImportStatusChanged);
+    connect(m_playlistImportManager, &PlaylistImportManager::platformChanged,
+            this, &AppController::playlistImportPlatformChanged);
+    connect(m_playlistImportManager, &PlaylistImportManager::countsChanged,
+            this, &AppController::playlistImportCountsChanged);
+    connect(m_playlistImportManager, &PlaylistImportManager::previewCompleted, this, [this]() {
+        setStatus(m_playlistImportManager->status());
+    });
+    connect(m_playlistImportManager, &PlaylistImportManager::previewFailed, this, [this](const QString& message) {
+        setStatus(message);
+    });
+
     m_activePlaylistId = QStringLiteral("liked");
     reloadActivePlaylistModel();
     loadFavoriteFeaturedPlaylists();
@@ -185,6 +208,11 @@ SearchResultModel* AppController::searchResultModel()
 PlaylistTrackModel* AppController::playlistTrackModel()
 {
     return &m_playlistTrackModel;
+}
+
+PlaylistImportPreviewModel* AppController::playlistImportModel()
+{
+    return m_playlistImportManager->model();
 }
 
 int AppController::currentPage() const { return m_currentPage; }
@@ -360,6 +388,41 @@ int AppController::likedTrackCount() const
     return m_playlistStore.trackCount(QStringLiteral("liked"));
 }
 
+bool AppController::playlistImportBusy() const
+{
+    return m_playlistImportManager->busy();
+}
+
+QString AppController::playlistImportStatus() const
+{
+    return m_playlistImportManager->status();
+}
+
+QString AppController::playlistImportPlatform() const
+{
+    return m_playlistImportManager->platformName();
+}
+
+int AppController::playlistImportMatchedCount() const
+{
+    return m_playlistImportManager->matchedCount();
+}
+
+int AppController::playlistImportUnmatchedCount() const
+{
+    return m_playlistImportManager->unmatchedCount();
+}
+
+int AppController::playlistImportProcessedCount() const
+{
+    return m_playlistImportManager->processedCount();
+}
+
+int AppController::playlistImportTotalCount() const
+{
+    return m_playlistImportManager->totalCount();
+}
+
 QVariantList AppController::featuredPlaylists() const
 {
     QVariantList items;
@@ -429,14 +492,14 @@ bool AppController::isFeaturedPlaylistFavorited(const QString& id) const
 
 void AppController::loadFavoriteFeaturedPlaylists()
 {
-    QSettings settings;
-    m_favoriteFeaturedPlaylistIds = settings.value(QStringLiteral("favoriteFeaturedPlaylists")).toStringList();
+    const auto settings = AppStorage::createSettings();
+    m_favoriteFeaturedPlaylistIds = settings->value(QStringLiteral("favoriteFeaturedPlaylists")).toStringList();
 }
 
 void AppController::saveFavoriteFeaturedPlaylists() const
 {
-    QSettings settings;
-    settings.setValue(QStringLiteral("favoriteFeaturedPlaylists"), m_favoriteFeaturedPlaylistIds);
+    const auto settings = AppStorage::createSettings();
+    settings->setValue(QStringLiteral("favoriteFeaturedPlaylists"), m_favoriteFeaturedPlaylistIds);
 }
 
 void AppController::searchFeaturedPlaylist(const QString& keyword, int page)
@@ -996,6 +1059,7 @@ void AppController::playSearchRow(int row)
 
     const QString cachedUrl = entry.streamUrl;
     if (!cachedUrl.isEmpty()) {
+        m_pendingSearchRow = -1;
         beginOnlinePlaybackUi(QStringLiteral("缓冲中…"));
         if (!entry.coverUrl.isEmpty()) {
             downloadNowPlayingCover(QUrl(entry.coverUrl), entry.songId);
@@ -1029,16 +1093,29 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
 {
     if (m_activeStreamPrefetchRow >= 0) {
         const int row = m_activeStreamPrefetchRow;
+        const OnlineQueueType type = m_activeStreamPrefetchType;
         m_streamPrefetchInFlight = false;
+        m_activeStreamPrefetchType = OnlineQueueType::None;
         m_activeStreamPrefetchRow = -1;
 
-        if (row >= 0 && row < m_searchResultModel.rowCount()) {
+        if (type == OnlineQueueType::Search && row >= 0 && row < m_searchResultModel.rowCount()) {
             const SearchResultEntry& entry = m_searchResultModel.entries().at(row);
             if (songIdsMatch(entry.songId, track.songId)
                 && sourcesMatch(effectiveSourceId(entry.sourceId, entry.songId),
                                  effectiveSourceId(track.sourceId, track.songId))) {
                 m_searchResultModel.updateStreamUrl(row, track.streamUrl, track.coverUrl, track.lyrics);
                 m_playlistStore.updateTrackStreamUrl(entry.songId, track.streamUrl, track.coverUrl);
+                prefetchResolvedOnlineStream(track.streamUrl,
+                                             effectiveSourceId(track.sourceId, track.songId));
+            }
+        } else if (type == OnlineQueueType::Playlist && row >= 0 && row < m_playlistTrackModel.rowCount()) {
+            const PlaylistTrackRef& ref = m_playlistTrackModel.entries().at(row).ref;
+            if (songIdsMatch(ref.songId, track.songId)
+                && sourcesMatch(effectiveSourceId(ref.sourceId, ref.songId),
+                                 effectiveSourceId(track.sourceId, track.songId))) {
+                m_playlistStore.updateTrackStreamUrl(ref.songId, track.streamUrl, track.coverUrl);
+                prefetchResolvedOnlineStream(track.streamUrl,
+                                             effectiveSourceId(track.sourceId, track.songId));
             }
         }
 
@@ -1077,6 +1154,7 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
         if (!track.coverUrl.isEmpty()) {
             downloadNowPlayingCover(QUrl(track.coverUrl), track.songId);
         }
+        m_pendingSearchRow = -1;
         loadOnlineStream(track.streamUrl, title, artist, {}, true, track.lyrics);
         return;
     }
@@ -1104,6 +1182,8 @@ void AppController::onStreamUrlResolved(const OnlineTrack& track)
         if (!track.coverUrl.isEmpty()) {
             downloadNowPlayingCover(QUrl(track.coverUrl), track.songId);
         }
+        m_playlistStore.updateTrackStreamUrl(ref.songId, track.streamUrl, track.coverUrl);
+        m_pendingPlaylistRow = -1;
         loadOnlineStream(track.streamUrl, title, artist, {}, true, track.lyrics);
     }
 }
@@ -1156,12 +1236,45 @@ void AppController::queueSearchStreamPrefetch()
     const int limit = qMin(entries.size(), kStreamPrefetchCount);
     for (int row = 0; row < limit; ++row) {
         if (entries.at(row).streamUrl.isEmpty()) {
-            m_streamPrefetchQueue.append(row);
+            m_streamPrefetchQueue.append({OnlineQueueType::Search, row});
         }
     }
 
     if (!m_streamPrefetchQueue.isEmpty()) {
         QTimer::singleShot(400, this, &AppController::startNextStreamPrefetch);
+    }
+}
+
+void AppController::queueAdjacentOnlineStreamPrefetch()
+{
+    cancelStreamUrlPrefetch();
+
+    if (m_onlineQueueType == OnlineQueueType::Search) {
+        const int row = m_onlineQueueRow + 1;
+        if (row >= 0 && row < m_searchResultModel.rowCount()) {
+            const SearchResultEntry& entry = m_searchResultModel.entries().at(row);
+            if (!entry.streamUrl.isEmpty()) {
+                prefetchResolvedOnlineStream(entry.streamUrl,
+                                             effectiveSourceId(entry.sourceId, entry.songId));
+                return;
+            }
+            m_streamPrefetchQueue.append({OnlineQueueType::Search, row});
+        }
+    } else if (m_onlineQueueType == OnlineQueueType::Playlist) {
+        const int row = m_onlineQueueRow + 1;
+        if (row >= 0 && row < m_playlistTrackModel.rowCount()) {
+            const PlaylistTrackRef& ref = m_playlistTrackModel.entries().at(row).ref;
+            if (!ref.streamUrl.isEmpty()) {
+                prefetchResolvedOnlineStream(ref.streamUrl,
+                                             effectiveSourceId(ref.sourceId, ref.songId));
+                return;
+            }
+            m_streamPrefetchQueue.append({OnlineQueueType::Playlist, row});
+        }
+    }
+
+    if (!m_streamPrefetchQueue.isEmpty()) {
+        QTimer::singleShot(250, this, &AppController::startNextStreamPrefetch);
     }
 }
 
@@ -1172,28 +1285,56 @@ void AppController::startNextStreamPrefetch()
     }
 
     while (!m_streamPrefetchQueue.isEmpty()) {
-        const int row = m_streamPrefetchQueue.takeFirst();
-        if (row < 0 || row >= m_searchResultModel.rowCount()) {
+        const StreamPrefetchRequest request = m_streamPrefetchQueue.takeFirst();
+        QString songId;
+        QString sourceId;
+        QString detailUrl;
+        QString title;
+        QString artist;
+
+        if (request.type == OnlineQueueType::Search) {
+            if (request.row < 0 || request.row >= m_searchResultModel.rowCount()) {
+                continue;
+            }
+            const SearchResultEntry& entry = m_searchResultModel.entries().at(request.row);
+            if (!entry.streamUrl.isEmpty()) {
+                prefetchResolvedOnlineStream(entry.streamUrl,
+                                             effectiveSourceId(entry.sourceId, entry.songId));
+                continue;
+            }
+            songId = entry.songId;
+            sourceId = effectiveSourceId(entry.sourceId, entry.songId);
+            detailUrl = entry.detailUrl;
+            title = entry.metadata.title;
+            artist = entry.metadata.artist;
+        } else if (request.type == OnlineQueueType::Playlist) {
+            if (request.row < 0 || request.row >= m_playlistTrackModel.rowCount()) {
+                continue;
+            }
+            const PlaylistTrackRef& ref = m_playlistTrackModel.entries().at(request.row).ref;
+            if (!ref.streamUrl.isEmpty()) {
+                prefetchResolvedOnlineStream(ref.streamUrl,
+                                             effectiveSourceId(ref.sourceId, ref.songId));
+                continue;
+            }
+            songId = ref.songId;
+            sourceId = effectiveSourceId(ref.sourceId, ref.songId);
+            detailUrl = ref.detailUrl;
+            title = ref.title;
+            artist = ref.artist;
+        } else {
             continue;
         }
 
-        const SearchResultEntry& entry = m_searchResultModel.entries().at(row);
-        if (!entry.streamUrl.isEmpty()) {
-            continue;
-        }
-
-        const QString src = effectiveSourceId(entry.sourceId, entry.songId);
-        MusicSourceClient* client = m_sourceRegistry.source(src);
+        MusicSourceClient* client = m_sourceRegistry.source(sourceId);
         if (!client) {
             continue;
         }
 
         m_streamPrefetchInFlight = true;
-        m_activeStreamPrefetchRow = row;
-        client->resolveStreamUrl(entry.songId,
-                                 QUrl(entry.detailUrl),
-                                 entry.metadata.title,
-                                 entry.metadata.artist);
+        m_activeStreamPrefetchType = request.type;
+        m_activeStreamPrefetchRow = request.row;
+        client->resolveStreamUrl(songId, QUrl(detailUrl), title, artist);
         return;
     }
 }
@@ -1202,7 +1343,22 @@ void AppController::cancelStreamUrlPrefetch()
 {
     m_streamPrefetchQueue.clear();
     m_streamPrefetchInFlight = false;
+    m_activeStreamPrefetchType = OnlineQueueType::None;
     m_activeStreamPrefetchRow = -1;
+}
+
+void AppController::prefetchResolvedOnlineStream(const QString& streamUrl, const QString& sourceId)
+{
+    if (streamUrl.isEmpty() || !m_backgroundStreamLoader) {
+        return;
+    }
+
+    StreamFetchOptions options;
+    if (MusicSourceClient* client = m_sourceRegistry.source(
+            sourceId.isEmpty() ? m_activeMusicSourceId : sourceId)) {
+        options = client->streamFetchOptions();
+    }
+    m_backgroundStreamLoader->prefetch(QUrl(streamUrl), options);
 }
 
 void AppController::onStreamUrlFailed(const QString& songId, const QString& message)
@@ -1292,6 +1448,27 @@ void AppController::loadOnlineStream(const QString& streamUrl,
     setStatus(QStringLiteral("正在缓冲在线音频…"));
     setSearchStatus(QStringLiteral("正在缓冲…"));
 
+    if (m_backgroundStreamLoader) {
+        m_backgroundStreamLoader->cancelActivePrefetch();
+    }
+    if (m_streamProxy) {
+        const QUrl localStreamUrl = m_streamProxy->streamUrl(QUrl(streamUrl), m_currentStreamFetchOptions);
+        if (localStreamUrl.isValid()) {
+            m_pendingStreamUrl.clear();
+            m_currentFilePath = localStreamUrl.toString();
+            m_audioPlayer.loadUrl(localStreamUrl);
+            m_currentSubtitle = autoPlay ? QStringLiteral("在线播放中") : QStringLiteral("已加载");
+            emit nowPlayingChanged();
+            setStatus(QStringLiteral("在线播放"));
+            setSearchStatus(QStringLiteral("正在播放…"));
+            if (autoPlay) {
+                m_audioPlayer.play();
+            }
+            queueAdjacentOnlineStreamPrefetch();
+            return;
+        }
+    }
+
     m_streamLoader->prefetch(QUrl(streamUrl), m_currentStreamFetchOptions);
 }
 
@@ -1314,6 +1491,7 @@ void AppController::onStreamPrefetchReady(const QString& localFilePath, const QU
     if (m_pendingStreamAutoPlay) {
         m_audioPlayer.play();
     }
+    queueAdjacentOnlineStreamPrefetch();
 }
 
 void AppController::onStreamPrefetchFailed(const QUrl& originalUrl, const QString& message)
@@ -1347,6 +1525,9 @@ void AppController::cancelPendingOnlineRequests()
     m_pendingStreamUrl.clear();
     if (m_streamLoader) {
         m_streamLoader->cancelActivePrefetch();
+    }
+    if (m_backgroundStreamLoader) {
+        m_backgroundStreamLoader->cancelActivePrefetch();
     }
     for (const QString& sourceId : m_sourceRegistry.sourceIds()) {
         if (MusicSourceClient* client = m_sourceRegistry.source(sourceId)) {
@@ -1826,6 +2007,7 @@ void AppController::playOnlineTrackRef(const PlaylistTrackRef& track, bool autoP
     m_currentSource = registrySourceLabel(m_sourceRegistry, track.sourceId, track.songId);
 
     if (!track.streamUrl.isEmpty()) {
+        m_pendingPlaylistRow = -1;
         beginOnlinePlaybackUi(QStringLiteral("缓冲中…"));
         if (!track.coverUrl.isEmpty()) {
             downloadNowPlayingCover(QUrl(track.coverUrl), track.songId);
@@ -1957,6 +2139,79 @@ bool AppController::deletePlaylist(const QString& id)
     }
     setStatus(QStringLiteral("已删除歌单「%1」").arg(name));
     return true;
+}
+
+void AppController::previewExternalPlaylist(const QString& url)
+{
+    m_playlistImportManager->preview(url);
+}
+
+QVariantMap AppController::confirmPlaylistImport(const QString& targetPlaylistId,
+                                                 const QString& newPlaylistName)
+{
+    QVariantMap summary;
+    QString playlistId = targetPlaylistId.trimmed();
+    const QString trimmedName = newPlaylistName.trimmed();
+    if (!trimmedName.isEmpty()) {
+        playlistId = m_playlistStore.createPlaylist(trimmedName);
+    }
+
+    if (playlistId.isEmpty() || !m_playlistStore.playlistById(playlistId)) {
+        summary.insert(QStringLiteral("ok"), false);
+        summary.insert(QStringLiteral("message"), QStringLiteral("请选择要导入的歌单"));
+        return summary;
+    }
+
+    QVector<PlaylistTrackRef> tracks;
+    QSet<QString> importedIds;
+    QSet<QString> duplicateIds;
+    const QVector<PlaylistImportPreviewRow>& rows = m_playlistImportManager->model()->rows();
+    for (const PlaylistImportPreviewRow& row : rows) {
+        if (!row.hasMatch()) {
+            continue;
+        }
+        tracks.append(row.match);
+        if (m_playlistStore.containsTrack(playlistId, row.match.songId)) {
+            duplicateIds.insert(row.match.songId);
+        } else {
+            importedIds.insert(row.match.songId);
+        }
+    }
+
+    const PlaylistAddResult result = m_playlistStore.addTracks(playlistId, tracks);
+    if (result.added == 0) {
+        importedIds.clear();
+    }
+    m_playlistImportManager->model()->markImported(importedIds, duplicateIds);
+    emit playlistImportCountsChanged();
+
+    const PlaylistInfo* playlist = m_playlistStore.playlistById(playlistId);
+    const QString playlistName = playlist ? playlist->name : QStringLiteral("歌单");
+    const QString message = QStringLiteral("已导入 %1 首到「%2」，跳过 %3 首重复，未匹配 %4 首")
+        .arg(result.added)
+        .arg(playlistName)
+        .arg(result.duplicate)
+        .arg(m_playlistImportManager->unmatchedCount());
+    setStatus(message);
+
+    openPlaylist(playlistId);
+
+    summary.insert(QStringLiteral("ok"), true);
+    summary.insert(QStringLiteral("added"), result.added);
+    summary.insert(QStringLiteral("duplicate"), result.duplicate);
+    summary.insert(QStringLiteral("unmatched"), m_playlistImportManager->unmatchedCount());
+    summary.insert(QStringLiteral("message"), message);
+    return summary;
+}
+
+void AppController::cancelPlaylistImport()
+{
+    m_playlistImportManager->cancel();
+}
+
+void AppController::clearPlaylistImportPreview()
+{
+    m_playlistImportManager->clear();
 }
 
 void AppController::openPlaylist(const QString& id)
@@ -2133,6 +2388,39 @@ void AppController::removeTrackFromActivePlaylist(int row)
     removePlaylistTrack(row);
 }
 
+int AppController::removeTracksFromActivePlaylist(const QVariantList& rows)
+{
+    QList<int> orderedRows;
+    orderedRows.reserve(rows.size());
+    QSet<int> seen;
+    for (const QVariant& value : rows) {
+        const int row = value.toInt();
+        if (row < 0 || row >= m_playlistTrackModel.rowCount() || seen.contains(row)) {
+            continue;
+        }
+        seen.insert(row);
+        orderedRows.append(row);
+    }
+
+    std::sort(orderedRows.begin(), orderedRows.end(), std::greater<int>());
+
+    int removed = 0;
+    for (const int row : orderedRows) {
+        const QString songId = m_playlistTrackModel.songIdAt(row);
+        if (!songId.isEmpty() && m_playlistStore.removeTrack(m_activePlaylistId, songId)) {
+            ++removed;
+        }
+    }
+
+    if (removed > 0) {
+        reloadActivePlaylistModel();
+        syncSearchLikedStates();
+        syncLocalLikedStates();
+        setStatus(QStringLiteral("已删除 %1 首歌曲").arg(removed));
+    }
+    return removed;
+}
+
 PlaylistTrackRef AppController::trackRefFromPlaylistRow(int row) const
 {
     PlaylistTrackRef ref;
@@ -2267,6 +2555,22 @@ void AppController::setUiBackgroundOpacity(qreal value)
     emit appearanceSettingsChanged();
 }
 
+qreal AppController::uiCardShellOpacity() const
+{
+    return m_uiCardShellOpacity;
+}
+
+void AppController::setUiCardShellOpacity(qreal value)
+{
+    const qreal clamped = qBound(0.05, value, 0.55);
+    if (qFuzzyCompare(m_uiCardShellOpacity, clamped)) {
+        return;
+    }
+    m_uiCardShellOpacity = clamped;
+    saveAppearanceSettings();
+    emit appearanceSettingsChanged();
+}
+
 bool AppController::hasHomeWallpaper() const
 {
     return !m_homeWallpaperPath.isEmpty();
@@ -2303,6 +2607,39 @@ QUrl AppController::homeWallpaperUrl() const
     return QUrl::fromLocalFile(m_homeWallpaperPath);
 }
 
+bool AppController::uiCustomTextColorEnabled() const
+{
+    return m_uiCustomTextColorEnabled;
+}
+
+void AppController::setUiCustomTextColorEnabled(bool value)
+{
+    if (m_uiCustomTextColorEnabled == value) {
+        return;
+    }
+    m_uiCustomTextColorEnabled = value;
+    saveAppearanceSettings();
+    emit appearanceSettingsChanged();
+}
+
+QColor AppController::uiTextColor() const
+{
+    return m_uiTextColor;
+}
+
+void AppController::setUiTextColor(const QColor& value)
+{
+    if (!value.isValid()) {
+        return;
+    }
+    if (m_uiTextColor == value) {
+        return;
+    }
+    m_uiTextColor = value;
+    saveAppearanceSettings();
+    emit appearanceSettingsChanged();
+}
+
 bool AppController::launchAtStartup() const
 {
     return m_launchAtStartup;
@@ -2320,28 +2657,35 @@ void AppController::setLaunchAtStartup(bool enabled)
 
 void AppController::loadAppearanceSettings()
 {
-    QSettings settings;
-    m_uiBackgroundOpacity = qBound(0.0, settings.value(QStringLiteral("appearance/backgroundOpacity"), 1.0).toReal(), 1.0);
-    m_homeWallpaperPath = settings.value(QStringLiteral("appearance/homeWallpaperPath")).toString();
+    const auto settings = AppStorage::createSettings();
+    m_uiBackgroundOpacity = qBound(0.0, settings->value(QStringLiteral("appearance/backgroundOpacity"), 1.0).toReal(), 1.0);
+    m_uiCardShellOpacity = qBound(0.05, settings->value(QStringLiteral("appearance/cardShellOpacity"), 0.20).toReal(), 0.55);
+    m_homeWallpaperPath = settings->value(QStringLiteral("appearance/homeWallpaperPath")).toString();
+    m_uiCustomTextColorEnabled = settings->value(QStringLiteral("appearance/customTextColorEnabled"), false).toBool();
+    const QColor loadedTextColor(settings->value(QStringLiteral("appearance/textColor"), QStringLiteral("#1B1B1F")).toString());
+    m_uiTextColor = loadedTextColor.isValid() ? loadedTextColor : QColor(QStringLiteral("#1B1B1F"));
 }
 
 void AppController::saveAppearanceSettings() const
 {
-    QSettings settings;
-    settings.setValue(QStringLiteral("appearance/backgroundOpacity"), m_uiBackgroundOpacity);
-    settings.setValue(QStringLiteral("appearance/homeWallpaperPath"), m_homeWallpaperPath);
+    const auto settings = AppStorage::createSettings();
+    settings->setValue(QStringLiteral("appearance/backgroundOpacity"), m_uiBackgroundOpacity);
+    settings->setValue(QStringLiteral("appearance/cardShellOpacity"), m_uiCardShellOpacity);
+    settings->setValue(QStringLiteral("appearance/homeWallpaperPath"), m_homeWallpaperPath);
+    settings->setValue(QStringLiteral("appearance/customTextColorEnabled"), m_uiCustomTextColorEnabled);
+    settings->setValue(QStringLiteral("appearance/textColor"), m_uiTextColor.name(QColor::HexRgb));
 }
 
 void AppController::loadGeneralSettings()
 {
-    QSettings settings;
-    m_launchAtStartup = settings.value(QStringLiteral("general/launchAtStartup"), false).toBool();
+    const auto settings = AppStorage::createSettings();
+    m_launchAtStartup = settings->value(QStringLiteral("general/launchAtStartup"), false).toBool();
 }
 
 void AppController::saveGeneralSettings() const
 {
-    QSettings settings;
-    settings.setValue(QStringLiteral("general/launchAtStartup"), m_launchAtStartup);
+    const auto settings = AppStorage::createSettings();
+    settings->setValue(QStringLiteral("general/launchAtStartup"), m_launchAtStartup);
 }
 
 bool AppController::settingsVisible() const

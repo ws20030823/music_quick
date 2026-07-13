@@ -1,5 +1,7 @@
 #include "app/MediaCacheManager.h"
 
+#include "app/AppStorage.h"
+
 #include <algorithm>
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -7,7 +9,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSettings>
-#include <QStandardPaths>
 #include <QUrl>
 
 namespace {
@@ -53,7 +54,7 @@ MediaCacheManager::MediaCacheManager(QObject* parent)
 
 QString MediaCacheManager::defaultRootPath()
 {
-    const QString cacheLocation = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    const QString cacheLocation = AppStorage::cacheDir();
     if (!cacheLocation.isEmpty()) {
         return cacheLocation;
     }
@@ -188,21 +189,21 @@ void MediaCacheManager::clearAll()
 
 void MediaCacheManager::loadSettings()
 {
-    QSettings settings;
-    const QString savedRoot = settings.value(QStringLiteral("cache/rootPath")).toString();
+    const auto settings = AppStorage::createSettings();
+    const QString savedRoot = settings->value(QStringLiteral("cache/rootPath")).toString();
     if (!savedRoot.isEmpty()) {
         m_rootPath = savedRoot;
     }
-    m_maxSizeMb = settings.value(QStringLiteral("cache/maxSizeMb"), 512).toInt();
+    m_maxSizeMb = settings->value(QStringLiteral("cache/maxSizeMb"), 512).toInt();
     m_maxSizeMb = qBound(kMinCacheMb, m_maxSizeMb, kMaxCacheMb);
     ensureDirectories();
 }
 
 void MediaCacheManager::saveSettings() const
 {
-    QSettings settings;
-    settings.setValue(QStringLiteral("cache/rootPath"), m_rootPath);
-    settings.setValue(QStringLiteral("cache/maxSizeMb"), m_maxSizeMb);
+    const auto settings = AppStorage::createSettings();
+    settings->setValue(QStringLiteral("cache/rootPath"), m_rootPath);
+    settings->setValue(QStringLiteral("cache/maxSizeMb"), m_maxSizeMb);
 }
 
 qint64 MediaCacheManager::directorySizeBytes(const QString& path) const

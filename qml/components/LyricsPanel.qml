@@ -1,4 +1,4 @@
-// LyricsPanel.qml — 网易云风格歌词（去时间戳 / 高亮 / 渐变 / 平滑滚动）
+// LyricsPanel.qml — 网易云风格歌词（卡片蒙层 / 高亮 / 渐变 / 平滑滚动）
 import QtQuick
 import MusicQuick
 
@@ -8,12 +8,15 @@ Item {
     property string lyricsText: ""
     property int positionMs: 0
     property bool canSeek: false
+    property real cardShellAlpha: 0.20
 
     signal lineClicked(int timeMs)
 
     readonly property var parsedLines: parseLrc(lyricsText)
     readonly property bool hasLyrics: parsedLines.length > 0
     readonly property int activeIndex: hasLyrics ? indexForPosition(positionMs) : -1
+    readonly property color shellColor: Theme.cardShellTint(cardShellAlpha)
+    readonly property color shellBorder: Theme.cardShellBorder(cardShellAlpha)
 
     function parseLrc(raw) {
         if (!raw || raw.trim().length === 0)
@@ -75,18 +78,11 @@ Item {
     }
 
     Rectangle {
-        anchors.fill: parent
-        anchors.topMargin: 3
-        radius: Theme.radiusLg
-        color: Theme.npLyricsShadow
-    }
-
-    Rectangle {
         id: card
         anchors.fill: parent
         radius: Theme.radiusLg
-        color: Theme.npLyricsBg
-        border.color: Theme.npBorder
+        color: root.shellColor
+        border.color: root.shellBorder
         border.width: 1
         clip: true
 
@@ -95,7 +91,7 @@ Item {
             visible: !root.hasLyrics
             text: qsTr("暂无歌词")
             font.pixelSize: 15
-            color: Theme.npTextDim
+            color: Theme.textTertiary
         }
 
         ListView {
@@ -167,7 +163,7 @@ Item {
             height: Theme.npLyricFadeHeight
             z: 2
             gradient: Gradient {
-                GradientStop { position: 0.0; color: Theme.npLyricsBg }
+                GradientStop { position: 0.0; color: root.shellColor }
                 GradientStop { position: 1.0; color: "#00FFFFFF" }
             }
         }
@@ -180,7 +176,7 @@ Item {
             z: 2
             gradient: Gradient {
                 GradientStop { position: 0.0; color: "#00FFFFFF" }
-                GradientStop { position: 1.0; color: Theme.npLyricsBg }
+                GradientStop { position: 1.0; color: root.shellColor }
             }
         }
     }

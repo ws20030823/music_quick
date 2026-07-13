@@ -8,14 +8,14 @@ Item {
     id: root
 
     property var items: []
-    property var colors: ["#B497CF", Theme.accent]
+    property var colors: []
     property string position: "left"
     property bool opened: false
     property int currentIndex: 0
     property color accentColor: Theme.accent
     property bool displayItemNumbering: true
     property bool showCloseButton: true
-    property real cardOpacity: 1.0
+    property real cardShellAlpha: 0.20
 
     signal itemSelected(int index)
     signal menuOpened()
@@ -148,8 +148,10 @@ Item {
         width: root.slideWidth
         x: root.fromLeft ? 0 : parent.width - width
         radius: Theme.cardShellRadius
-        color: root.colors.length > 0 ? root.colors[0] : "#B497CF"
-        border.color: Theme.cardBorder
+        color: root.colors.length > 0
+               ? root.colors[0]
+               : Theme.cardShellTint(root.cardShellAlpha * 0.55)
+        border.color: Theme.cardShellBorder(root.cardShellAlpha * 0.55)
         border.width: 1
         z: 1
         transform: Translate { id: pre0Shift; x: root.hideX }
@@ -162,8 +164,10 @@ Item {
         width: root.slideWidth
         x: root.fromLeft ? 0 : parent.width - width
         radius: Theme.cardShellRadius
-        color: root.colors.length > 1 ? root.colors[1] : Theme.accent
-        border.color: Theme.cardBorder
+        color: root.colors.length > 0
+               ? root.colors[1]
+               : Theme.cardShellTint(root.cardShellAlpha * 0.82)
+        border.color: Theme.cardShellBorder(root.cardShellAlpha * 0.82)
         border.width: 1
         z: 2
         transform: Translate { id: pre1Shift; x: root.hideX }
@@ -192,8 +196,8 @@ Item {
             id: menuCardBody
             anchors.fill: parent
             radius: Theme.cardShellRadius
-            color: Theme.bgCard
-            border.color: Theme.cardBorder
+            color: Theme.cardShellTint(root.cardShellAlpha)
+            border.color: Theme.cardShellBorder(root.cardShellAlpha)
             border.width: 1
         }
 
@@ -279,8 +283,19 @@ Item {
                         NumberAnimation { duration: 360 }
                     }
 
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.leftMargin: 4
+                        anchors.rightMargin: 8
+                        radius: 8
+                        color: index === root.currentIndex ? Theme.bgHover : "transparent"
+                        visible: index === root.currentIndex
+                    }
+
                     Row {
                         anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 4
                         spacing: 8
 
                         Text {
@@ -288,7 +303,7 @@ Item {
                             text: ("0" + (index + 1)).slice(-2)
                             font.pixelSize: 13
                             font.weight: Font.Medium
-                            color: index === root.currentIndex ? root.accentColor : Theme.textTertiary
+                            color: index === root.currentIndex ? Theme.textPrimary : Theme.textTertiary
                             width: 26
                         }
 
@@ -296,9 +311,9 @@ Item {
                             text: root.items[index].label !== undefined
                                   ? root.items[index].label : ""
                             font.pixelSize: Math.min(30, Math.max(20, root.width * 0.085))
-                            font.bold: true
+                            font.bold: index === root.currentIndex
                             font.letterSpacing: -0.5
-                            color: index === root.currentIndex ? root.accentColor : Theme.textPrimary
+                            color: Theme.textPrimary
                         }
                     }
 

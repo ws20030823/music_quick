@@ -17,11 +17,22 @@ ApplicationWindow {
     color: "transparent"
     flags: Qt.Window | Qt.FramelessWindowHint
 
-    readonly property real skinCardOpacity: app.uiBackgroundOpacity
+    readonly property real cardShellAlpha: app.uiCardShellOpacity
+
+    Component.onCompleted: syncThemeTextColors()
+    Connections {
+        target: app
+        function onAppearanceSettingsChanged() { root.syncThemeTextColors() }
+    }
+
+    function syncThemeTextColors() {
+        Theme.customTextEnabled = app.uiCustomTextColorEnabled
+        Theme.customTextBase = app.uiTextColor
+    }
 
     background: WallpaperBackground {
         wallpaperSource: app.hasHomeWallpaper ? app.homeWallpaperUrl : ""
-        skinOpacity: app.uiBackgroundOpacity
+        wallpaperOpacity: app.uiBackgroundOpacity
     }
 
     FileDialog {
@@ -40,6 +51,7 @@ ApplicationWindow {
         anchors.fill: parent
         anchors.margins: Theme.shellPadding
         spacing: Theme.cardGap
+        enabled: !app.nowPlayingVisible
 
         RowLayout {
             Layout.fillWidth: true
@@ -51,7 +63,7 @@ ApplicationWindow {
                 Layout.preferredWidth: Theme.sidebarWidth
                 Layout.minimumWidth: Theme.sidebarWidth
                 Layout.fillHeight: true
-                cardOpacity: root.skinCardOpacity
+                cardShellAlpha: root.cardShellAlpha
                 clip: true
 
                 AppSidebar {
@@ -78,13 +90,16 @@ ApplicationWindow {
                         { label: qsTr("系统") },
                         { label: qsTr("换肤") }
                     ]
-                    colors: ["#C8D9F0", Theme.accent]
+                    colors: [
+                        Theme.cardShellTint(root.cardShellAlpha * 0.55),
+                        Theme.cardShellTint(root.cardShellAlpha * 0.82)
+                    ]
                     position: "left"
                     opened: app.settingsVisible
                     currentIndex: app.settingsSection
-                    accentColor: Theme.accent
+                    accentColor: Theme.textPrimary
                     showCloseButton: true
-                    cardOpacity: root.skinCardOpacity
+                    cardShellAlpha: root.cardShellAlpha
                     onItemSelected: function(index) { app.settingsSection = index }
                     onCloseRequested: app.closeSettings()
                 }
@@ -93,7 +108,7 @@ ApplicationWindow {
             SurfaceCard {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                cardOpacity: root.skinCardOpacity
+                cardShellAlpha: root.cardShellAlpha
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -137,7 +152,9 @@ ApplicationWindow {
                                 onImportClicked: importDialog.open()
                             }
                             SearchPage { }
-                            PlaylistPage { }
+                            PlaylistPage {
+                                onImportPlaylistClicked: importPlaylistDialog.openForPlaylist(app.activePlaylistId)
+                            }
                             FeaturedPlaylistPage { }
                         }
 
@@ -155,7 +172,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.playbackBarHeight
             Layout.minimumHeight: Theme.playbackBarHeight
-            cardOpacity: root.skinCardOpacity
+            cardShellAlpha: root.cardShellAlpha
 
             PlaybackBar {
                 anchors.fill: parent
@@ -166,6 +183,10 @@ ApplicationWindow {
 
     QueueDialog {
         id: queueDialog
+    }
+
+    ImportPlaylistDialog {
+        id: importPlaylistDialog
     }
 
     Connections {
@@ -193,5 +214,6 @@ ApplicationWindow {
         sparkRadius: 15
         sparkCount: 8
         duration: 400
+        sparksEnabled: !Theme.reduceMotion && !app.nowPlayingVisible
     }
 }

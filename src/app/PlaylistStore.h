@@ -23,6 +23,12 @@ struct PlaylistInfo {
     QVector<PlaylistTrackRef> tracks;
 };
 
+struct PlaylistAddResult {
+    int added = 0;
+    int duplicate = 0;
+    int invalid = 0;
+};
+
 class PlaylistStore final : public QObject
 {
     Q_OBJECT
@@ -39,6 +45,7 @@ public:
     QString createPlaylist(const QString& name);
     bool deletePlaylist(const QString& id);
     bool addTrack(const QString& playlistId, const PlaylistTrackRef& track);
+    PlaylistAddResult addTracks(const QString& playlistId, const QVector<PlaylistTrackRef>& tracks);
     bool removeTrack(const QString& playlistId, const QString& songId);
     bool containsTrack(const QString& playlistId, const QString& songId) const;
     bool updateTrackStreamUrl(const QString& songId, const QString& streamUrl, const QString& coverUrl);

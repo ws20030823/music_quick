@@ -6,17 +6,16 @@ import QtQuick.Layouts
 import QtQuick.Window
 import MusicQuick
 
-Rectangle {
+Item {
 
     id: root
-
-    color: Theme.bgCard
 
     implicitHeight: Theme.playbackBarHeight
 
     required property Window window
 
     property bool seeking: false
+    property bool showPlaybackMode: true
 
     function pointOnInteractiveControl(x, y) {
         var item = contentHost.childAt(x, y)
@@ -39,18 +38,6 @@ Rectangle {
     }
 
 
-
-    Rectangle {
-
-        anchors.top: parent.top
-
-        width: parent.width
-
-        height: 1
-
-        color: Theme.border
-
-    }
 
     function formatMs(ms) {
 
@@ -315,6 +302,8 @@ Rectangle {
 
 
                 IconTransportButton {
+                    visible: root.showPlaybackMode
+                    Layout.preferredWidth: root.showPlaybackMode ? implicitWidth : 0
 
                     iconName: Icons.modeIconName(app.playbackMode)
 
@@ -357,7 +346,7 @@ Rectangle {
 
                         color: parent.down ? Theme.accentSoft
 
-                             : (parent.hovered && app.canControl ? Theme.bgHover : Theme.bgCard)
+                             : (parent.hovered && app.canControl ? Theme.bgHover : "transparent")
 
                         border.color: Theme.borderStrong
 
@@ -552,9 +541,9 @@ Rectangle {
 
                         radius: Theme.radiusMd
 
-                        color: Theme.bgCard
+                        color: Theme.cardShellTint(app.uiCardShellOpacity + 0.18)
 
-                        border.color: Theme.borderStrong
+                        border.color: Theme.cardShellBorder(app.uiCardShellOpacity + 0.18)
 
                     }
 
@@ -571,7 +560,7 @@ Rectangle {
                         Text {
                             text: Math.round(app.volume)
                             font.pixelSize: 11
-                            color: Theme.textSecondary
+                            color: Theme.textTertiary
                             Layout.alignment: Qt.AlignHCenter
                         }
 

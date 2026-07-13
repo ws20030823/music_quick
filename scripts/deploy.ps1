@@ -1,7 +1,7 @@
-# 準備發佈目錄 dist\MusicQuick（供 Inno Setup 或手動分發使用）
-# 用法：在 PowerShell 中執行
+﻿# Prepare dist\MusicQuick for Inno Setup or manual distribution.
+# Usage (from repo root):
 #   .\scripts\deploy.ps1
-# 可選參數：
+# Optional:
 #   -QtBin "C:\Qt\6.11.1\mingw_64\bin"
 #   -BuildDir "build\Desktop_Qt_6_11_1_MinGW_64_bit-Release"
 
@@ -20,36 +20,42 @@ $QmlDir = Join-Path $Root "qml"
 $ModuleDir = Join-Path $ReleaseDir "MusicQuick"
 
 if (-not (Test-Path $Exe)) {
-    throw "找不到 Release 構建產物：$Exe`n請先在 Qt Creator 中以 Release 模式編譯。"
+    throw "Release build not found: $Exe`nBuild MusicQuick in Qt Creator with Release first."
 }
 if (-not (Test-Path $Windeployqt)) {
-    throw "找不到 windeployqt：$Windeployqt`n請用 -QtBin 指定正確的 Qt bin 目錄。"
+    throw "windeployqt not found: $Windeployqt`nPass the correct Qt bin path with -QtBin."
 }
 if (-not (Test-Path $ModuleDir)) {
-    throw "找不到 QML 模組目錄：$ModuleDir"
+    throw "QML module directory not found: $ModuleDir"
 }
 
-Write-Host "清理並建立 $DistDir ..."
+Write-Host "Cleaning and creating $DistDir ..."
 if (Test-Path $DistDir) {
     Remove-Item -Recurse -Force $DistDir
 }
 New-Item -ItemType Directory -Path $DistDir | Out-Null
 
-Write-Host "複製 MusicQuick.exe ..."
+Write-Host "Copying MusicQuick.exe ..."
 Copy-Item $Exe $DistDir
 
-Write-Host "執行 windeployqt ..."
+Write-Host "Running windeployqt ..."
 Push-Location $DistDir
 & $Windeployqt MusicQuick.exe --release --qmldir $QmlDir --compiler-runtime
 if ($LASTEXITCODE -ne 0) {
     Pop-Location
-    throw "windeployqt 失敗，退出碼 $LASTEXITCODE"
+    throw "windeployqt failed with exit code $LASTEXITCODE"
 }
 Pop-Location
 
-Write-Host "複製 MusicQuick QML 模組 ..."
+Write-Host "Copying MusicQuick QML module ..."
 Copy-Item -Recurse -Force $ModuleDir (Join-Path $DistDir "MusicQuick")
 
+# Marker for portable mode: settings/data live under <exe>/data/
+# Inno Setup excludes this file so installed builds use AppData/Registry.
+Write-Host "Writing portable marker ..."
+New-Item -ItemType File -Path (Join-Path $DistDir "portable") -Force | Out-Null
+
 Write-Host ""
-Write-Host "完成。發佈目錄：$DistDir"
-Write-Host "下一步：用 Inno Setup 編譯 installer\MusicQuick.iss"
+Write-Host "Done. Dist folder: $DistDir"
+Write-Host "Portable zip: keep the 'portable' file next to MusicQuick.exe"
+Write-Host "Installer: compile installer\MusicQuick.iss (excludes 'portable')"

@@ -16,6 +16,7 @@
 #include "test_gequbao_parser.h"
 #include "test_curl_http_client.h"
 #include "test_now_playing.h"
+#include "test_external_playlist_importer.h"
 
 // AudioPlayer：构造、音量、加载、toggle 等基础行为
 class TestAudioPlayer final : public QObject
@@ -259,6 +260,10 @@ int main(int argc, char* argv[])
     {
         TestNowPlayingVisibility nowPlayingTests;
         status |= QTest::qExec(&nowPlayingTests, argc, argv);
+    }
+    {
+        ExternalPlaylistImporterTest externalPlaylistImporterTests;
+        status |= QTest::qExec(&externalPlaylistImporterTests, argc, argv);
     }
 
     return status;

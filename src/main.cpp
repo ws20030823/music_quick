@@ -16,6 +16,7 @@
 #include <QIcon>
 
 #include "app/AppController.h"
+#include "app/AppStorage.h"
 #include "app/CoverImageProvider.h"
 
 namespace {
@@ -43,6 +44,7 @@ int main(int argc, char* argv[])
     QGuiApplication::setApplicationName(QStringLiteral("WingSound"));
     QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/logo.svg")));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+    AppStorage::initialize();
 
     QQmlApplicationEngine engine;
     auto* controller = new AppController(&engine);
